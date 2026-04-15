@@ -60,7 +60,7 @@ export function AppSidebar() {
             </span>
           )}
           {collapsed && (
-            <span className="font-display text-sm font-bold text-sidebar-foreground">ES</span>
+            <span className="font-display text-sm font-bold text-sidebar-foreground">CF</span>
           )}
         </NavLink>
       </SidebarHeader>

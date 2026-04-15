@@ -1,4 +1,4 @@
-import logoGlyph from "@/assets/logo-glyph.png";
+import centerfrios from "@/assets/centerfrios-logo.png";
 
 interface LogoProps {
   size?: "sm" | "md" | "lg";
@@ -6,19 +6,15 @@ interface LogoProps {
 }
 
 const sizes = {
-  sm: { glyph: "w-7 h-7", text: "text-lg" },
-  md: { glyph: "w-9 h-9", text: "text-[22px]" },
-  lg: { glyph: "w-12 h-12", text: "text-2xl" },
+  sm: "h-8",
+  md: "h-10",
+  lg: "h-14",
 };
 
 export function Logo({ size = "md", className = "" }: LogoProps) {
-  const s = sizes[size];
   return (
-    <span className={`inline-flex items-center gap-0.5 ${className}`}>
-      <img src={logoGlyph} alt="" className={`${s.glyph} object-contain`} />
-      <span className={`font-display font-bold text-primary tracking-tight ${s.text}`}>
-        meuevento
-      </span>
+    <span className={`inline-flex items-center ${className}`}>
+      <img src={centerfrios} alt="Centerfrios" className={`${sizes[size]} object-contain`} />
     </span>
   );
 }
