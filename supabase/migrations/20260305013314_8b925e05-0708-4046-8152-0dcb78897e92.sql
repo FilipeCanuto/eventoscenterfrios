@@ -1,0 +1,1 @@
+UPDATE profiles SET company_slug = 'ezdisplay-ai' WHERE id = 'ce75d3c2-9fe5-449b-9213-c49e48965746' AND company_slug IS NULL;

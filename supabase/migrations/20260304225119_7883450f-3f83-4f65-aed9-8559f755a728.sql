@@ -1,0 +1,1 @@
+ALTER TABLE public.events ADD COLUMN color_mode text DEFAULT 'light';
