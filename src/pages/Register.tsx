@@ -170,7 +170,7 @@ const FlyerImage = ({ flyerUrl, eventName, className = "" }: { flyerUrl: string 
 
 const PoweredBy = () => (
   <p className="text-center text-xs text-muted-foreground mt-6">
-    Powered by <span className="font-semibold">meuevento</span>
+    Powered by <span className="font-semibold">Centerfrios</span>
   </p>
 );
 

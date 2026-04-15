@@ -56,7 +56,7 @@ export function AppSidebar() {
         <NavLink to="/dashboard/events" className="flex items-center gap-2" onClick={handleNavClick}>
           {!collapsed && (
             <span className="font-display text-lg font-bold text-sidebar-foreground">
-              meuevento
+              Centerfrios
             </span>
           )}
           {collapsed && (

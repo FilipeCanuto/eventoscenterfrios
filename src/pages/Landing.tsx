@@ -493,7 +493,7 @@ const Landing = () => {
         <div className="max-w-7xl mx-auto px-6 lg:px-8">
           <div className="flex items-center justify-between mb-10">
             <h2 className="text-2xl sm:text-3xl font-display text-foreground tracking-[-0.02em]" style={{ fontWeight: titleWeight }}>
-              Eventos populares no meuevento
+              Eventos populares no Centerfrios
             </h2>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
@@ -544,7 +544,7 @@ const Landing = () => {
               Tudo que você precisa para eventos incríveis
             </h2>
             <p className="text-muted-foreground text-lg max-w-2xl mx-auto">
-              Da criação de páginas à análise pós-evento, o meuevento tem tudo.
+              Da criação de páginas à análise pós-evento, o Centerfrios tem tudo.
             </p>
           </motion.div>
 
@@ -625,7 +625,7 @@ const Landing = () => {
           <div className="grid grid-cols-2 md:grid-cols-5 gap-6">
             {[
               {
-                quote: "O meuevento reduziu nosso tempo de preparação em 80%. Passamos de horas em inscrições para minutos.",
+                quote: "O Centerfrios reduziu nosso tempo de preparação em 80%. Passamos de horas em inscrições para minutos.",
                 name: "Sarah Chen",
                 role: "Gerente de comunidade",
                 avatar: avatarSarah,
@@ -643,7 +643,7 @@ const Landing = () => {
                 avatar: avatarPriya,
               },
               {
-                quote: "Trocamos três ferramentas diferentes por apenas o meuevento. Tudo em um só lugar é transformador.",
+                quote: "Trocamos três ferramentas diferentes por apenas o Centerfrios. Tudo em um só lugar é transformador.",
                 name: "James Liu",
                 role: "Organizador de meetups tech",
                 avatar: "https://i.pravatar.cc/300?img=33",
@@ -777,7 +777,7 @@ const Landing = () => {
                     Pronto para criar seu próximo evento?
                   </h2>
                   <p className="text-background/70 text-lg mb-8 max-w-lg mx-auto text-balance">
-                    Junte-se a milhares de organizadores que usam o meuevento para criar eventos melhores.
+                    Junte-se a milhares de organizadores que usam o Centerfrios para criar eventos melhores.
                   </p>
                   <Button size="lg" className="text-base font-semibold px-8 h-12 bg-primary text-primary-foreground hover:bg-primary/90" asChild>
                     <Link to="/auth">Começar gratuitamente <ArrowRight className="ml-2 w-4 h-4" /></Link>
@@ -793,7 +793,7 @@ const Landing = () => {
       <footer className="py-12 px-6 lg:px-8">
         <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-6">
           <Logo size="md" />
-          <p className="text-sm text-muted-foreground">© 2026 meuevento. Todos os direitos reservados.</p>
+          <p className="text-sm text-muted-foreground">© 2026 Centerfrios. Todos os direitos reservados.</p>
         </div>
       </footer>
 
