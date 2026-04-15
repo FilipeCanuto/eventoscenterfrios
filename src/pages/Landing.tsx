@@ -530,6 +530,7 @@ const Landing = () => {
         </div>
       </section>
 
+      <div className="hidden">
       {/* Features */}
       <section id="features" className="py-20 lg:py-28 bg-card">
         <div className="max-w-5xl mx-auto px-6 lg:px-8">
@@ -796,6 +797,7 @@ const Landing = () => {
           <p className="text-sm text-muted-foreground">© 2026 Centerfrios. Todos os direitos reservados.</p>
         </div>
       </footer>
+      </div>
 
       {/* Dev picker */}
       <div className="fixed bottom-0 left-1/2 -translate-x-1/2 z-[9999]">
