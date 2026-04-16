@@ -300,7 +300,39 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      public_company_profiles: {
+        Row: {
+          avatar_url: string | null
+          company: string | null
+          company_description: string | null
+          company_slug: string | null
+          full_name: string | null
+          id: string | null
+          social_links: Json | null
+          website: string | null
+        }
+        Insert: {
+          avatar_url?: string | null
+          company?: string | null
+          company_description?: string | null
+          company_slug?: string | null
+          full_name?: string | null
+          id?: string | null
+          social_links?: Json | null
+          website?: string | null
+        }
+        Update: {
+          avatar_url?: string | null
+          company?: string | null
+          company_description?: string | null
+          company_slug?: string | null
+          full_name?: string | null
+          id?: string | null
+          social_links?: Json | null
+          website?: string | null
+        }
+        Relationships: []
+      }
     }
     Functions: {
       get_registration_count: { Args: { p_event_id: string }; Returns: number }
