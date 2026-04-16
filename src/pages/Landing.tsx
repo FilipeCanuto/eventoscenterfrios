@@ -163,7 +163,7 @@ function IllustrationAttendees({ accents }: { accents: BentoAccents }) {
 
 const ILLUSTRATIONS = [IllustrationPages, IllustrationAnalytics, IllustrationIntegrations, IllustrationAttendees];
 
-const rotatingWords = ["eventos.", "experiências.", "comunidades.", "conexões."];
+const rotatingWords = ["comunidades", "conexões", "experiências", "eventos"];
 
 const fontWeightOptions = [
   { label: "Medium (500)", value: 500 },
@@ -457,9 +457,7 @@ const Landing = () => {
                 <Logo size="lg" />
               </div>
               <h1 className="text-4xl sm:text-5xl lg:text-[44px] 2xl:text-[56px] font-display tracking-tight leading-[1.15] text-foreground mb-6" style={{ fontWeight: titleWeight }}>
-                A plataforma de eventos
-                <br />
-                onde ideias viram{" "}
+                A central oficial da CENTERFRIOS que impulsiona{" "}
                 <span className="inline-block relative" style={{ minWidth: "7ch" }}>
                   <AnimatePresence mode="wait">
                     <motion.span
@@ -473,15 +471,15 @@ const Landing = () => {
                       {rotatingWords[wordIndex]}
                     </motion.span>
                   </AnimatePresence>
-                  <span className="invisible block h-0 overflow-hidden" aria-hidden="true">comunidades.</span>
+                  <span className="invisible block h-0 overflow-hidden" aria-hidden="true">experiências</span>
                 </span>
+                .
               </h1>
               <p className="text-lg text-muted-foreground max-w-lg mx-auto mb-8 leading-relaxed">
-                Seja qual for o seu evento — de workshops a conferências — crie páginas de inscrição
-                personalizadas, acompanhe participantes e faça sua comunidade crescer. Sem código.
+                Dos próximos encontros aos eventos já realizados, aqui você encontra tudo em um só lugar: informações, destaques e registros para acompanhar o que vem pela frente e revisitar o que já aconteceu.
               </p>
               <Button size="lg" className="text-base font-semibold px-8 h-12" asChild>
-                <Link to="/events">Conhecer eventos <ArrowRight className="ml-2 w-4 h-4" /></Link>
+                <Link to="/events">Ver todos os eventos <ArrowRight className="ml-2 w-4 h-4" /></Link>
               </Button>
             </motion.div>
           </div>
