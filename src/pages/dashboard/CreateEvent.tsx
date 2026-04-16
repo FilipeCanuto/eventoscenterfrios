@@ -41,8 +41,9 @@ const templates = [
 const defaultFields = [
   { label: "Nome Completo", field_type: "text", required: true, position: 0 },
   { label: "Endereço de E-mail", field_type: "email", required: true, position: 1 },
-  { label: "Empresa", field_type: "text", required: false, position: 2 },
-  { label: "Cargo", field_type: "text", required: false, position: 3 },
+  { label: "WhatsApp", field_type: "tel", required: true, position: 2 },
+  { label: "Empresa", field_type: "text", required: false, position: 3 },
+  { label: "Cargo", field_type: "text", required: false, position: 4 },
 ];
 
 const popularTimezones = [
