@@ -32,7 +32,7 @@ import { ptBR } from "date-fns/locale";
 
 type SocialLink = { platform: string; url: string };
 
-const SOCIAL_ICON_MAP: Record<string, React.ComponentType<{ className?: string; "aria-hidden"?: boolean }>> = {
+const SOCIAL_ICON_MAP: Record<string, React.ComponentType<any>> = {
   "Twitter / X": Twitter,
   Twitter: Twitter,
   X: Twitter,
