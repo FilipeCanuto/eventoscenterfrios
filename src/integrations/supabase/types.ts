@@ -168,6 +168,47 @@ export type Database = {
           },
         ]
       }
+      leads: {
+        Row: {
+          created_at: string
+          email: string
+          event_id: string | null
+          id: string
+          metadata: Json | null
+          name: string | null
+          phone: string | null
+          source: string | null
+        }
+        Insert: {
+          created_at?: string
+          email: string
+          event_id?: string | null
+          id?: string
+          metadata?: Json | null
+          name?: string | null
+          phone?: string | null
+          source?: string | null
+        }
+        Update: {
+          created_at?: string
+          email?: string
+          event_id?: string | null
+          id?: string
+          metadata?: Json | null
+          name?: string | null
+          phone?: string | null
+          source?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "leads_event_id_fkey"
+            columns: ["event_id"]
+            isOneToOne: false
+            referencedRelation: "events"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       profiles: {
         Row: {
           avatar_url: string | null

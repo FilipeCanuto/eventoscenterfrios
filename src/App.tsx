@@ -13,6 +13,7 @@ import Landing from "./pages/Landing";
 import Auth from "./pages/Auth";
 import Register from "./pages/Register";
 import CompanyPage from "./pages/CompanyPage";
+import PublicEvents from "./pages/PublicEvents";
 import Events from "./pages/dashboard/Events";
 import CreateEvent from "./pages/dashboard/CreateEvent";
 import EventDetail from "./pages/dashboard/EventDetail";
@@ -44,6 +45,7 @@ const App = () => (
             <Routes>
               {/* Public */}
               <Route path="/" element={<Landing />} />
+              <Route path="/events" element={<PublicEvents />} />
               <Route path="/auth" element={<Auth />} />
               <Route path="/register/:slug" element={<Register />} />
               <Route path="/company/:companySlug" element={<CompanyPage />} />
