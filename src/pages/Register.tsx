@@ -188,18 +188,28 @@ const RegistrationForm = ({
   className?: string;
 }) => (
   <form onSubmit={onSubmit} className={`space-y-4 ${className}`}>
-    {formFields?.map((field) => (
-      <div key={field.id} className="space-y-2">
-        <Label>{field.label}{field.required && " *"}</Label>
-        <Input
-          type={field.field_type === "email" ? "email" : field.field_type === "tel" ? "tel" : "text"}
-          placeholder={field.placeholder || field.label}
-          required={field.required}
-          value={formData[field.label] || ""}
-          onChange={e => onFieldChange(field.label, e.target.value)}
-        />
-      </div>
-    ))}
+    {formFields?.map((field) => {
+      const isPhone = isWhatsAppField(field.label);
+      const value = formData[field.label] || "";
+      const phoneInvalid = isPhone && field.required && value.length > 0 && !isValidBRPhone(value);
+      return (
+        <div key={field.id} className="space-y-2">
+          <Label>{field.label}{field.required && " *"}</Label>
+          <Input
+            type={field.field_type === "email" ? "email" : isPhone ? "tel" : field.field_type === "tel" ? "tel" : "text"}
+            inputMode={isPhone ? "tel" : undefined}
+            placeholder={isPhone ? "(11) 99999-9999" : field.placeholder || field.label}
+            required={field.required}
+            value={value}
+            onChange={e => onFieldChange(field.label, isPhone ? maskBRPhone(e.target.value) : e.target.value)}
+            aria-invalid={phoneInvalid || undefined}
+          />
+          {phoneInvalid && (
+            <p className="text-xs text-destructive">Informe um WhatsApp válido com DDD, ex.: (11) 99999-9999.</p>
+          )}
+        </div>
+      );
+    })}
     <div className="flex items-start gap-2 pt-2">
       <Checkbox id="gdpr" checked={consent} onCheckedChange={(c) => onConsentChange(!!c)} />
       <Label htmlFor="gdpr" className="text-xs text-muted-foreground leading-relaxed">
@@ -311,7 +321,7 @@ const Register = () => {
   if (submitted) {
     return wrapDark(
       <div className="min-h-screen flex items-center justify-center px-4 py-12 bg-background text-foreground" style={{ background: isDark ? undefined : `linear-gradient(135deg, ${brandColor}15, ${brandColor}05)` }}>
-        <SuccessCard brandColor={brandColor} eventName={event.name} />
+        <SuccessCard brandColor={brandColor} eventName={event.name} name={formData["Nome Completo"] || formData["Nome"] || formData["Name"] || ""} />
       </div>
     );
   }
