@@ -173,8 +173,10 @@ const CreateEvent = () => {
     if (!file) return;
     setUploading(true);
     try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error("Sessão expirada");
       const ext = file.name.split(".").pop();
-      const path = `flyers/${Date.now()}.${ext}`;
+      const path = `${user.id}/flyers/${Date.now()}.${ext}`;
       const { error: uploadError } = await supabase.storage.from("event-assets").upload(path, file);
       if (uploadError) throw uploadError;
       const { data: urlData } = supabase.storage.from("event-assets").getPublicUrl(path);
