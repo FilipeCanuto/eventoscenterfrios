@@ -1,134 +1,99 @@
 
 
-# Redesign da Página Pública da Empresa
+# Captura completa de leads + e-mail de confirmação com QR Code + animação comemorativa
 
-## Diagnóstico Atual
+## Visão geral
 
-A página `/company/:slug` (`src/pages/CompanyPage.tsx`) tem problemas sérios:
+Quatro mudanças coordenadas:
+1. **Formulário de inscrição** — incluir WhatsApp como campo obrigatório (junto a Nome e E-mail).
+2. **E-mail de confirmação** — enviar automaticamente após inscrição, com dados do evento + QR Code do "cartão de presença" + aviso sobre sorteio.
+3. **Validação de QR Code na entrada** — o QR aponta para uma URL pública que valida a inscrição.
+4. **Animação comemorativa** — confetes + mensagem empolgante na tela de sucesso.
 
-**Problemas visuais:**
-- Hero section fraca: gradiente genérico cor primária, sem hierarquia visual forte
-- Logo da empresa pequeno (16x16) e mal posicionado
-- Texto sobre fundo gradiente com contraste inconsistente (usa `text-foreground` e `text-white` misturados — quebra em light mode)
-- Ícones sociais usam `cdn.simpleicons.org` com cor branca fixa (invisíveis em light mode)
-- Cards de evento sem identidade — parecem genéricos
-- Toggle grid/list pequeno e sem destaque
-- Falta separação clara entre seções "Próximos" e "Anteriores"
-- Sem indicação visual de eventos passados (deveriam ter aparência diferente)
+---
 
-**Problemas de acessibilidade (WCAG):**
-- Contraste: `text-white` em hero gradiente claro falha AA
-- Botões `<button>` do toggle sem `aria-label` nem `aria-pressed`
-- Imagens sem texto alternativo descritivo (apenas o nome do evento)
-- Links externos sem `aria-label` indicando "abre em nova janela"
-- Headings: hierarquia OK (h1 → h2 → h3) mas falta landmark `<main>`
-- Sem skip link, sem foco visível customizado
-- Ícones decorativos sem `aria-hidden`
-- Cards inteiros são `<Link>` mas o botão "Inscrever-se" dentro também é clicável → link aninhado inválido
+## 1. Captura de WhatsApp obrigatório
 
-**Problemas de autoridade/profissionalismo:**
-- Falta de elementos de prova social (contagem total de eventos, participantes)
-- Sem badge/identidade de "empresa verificada" ou destaque institucional
-- Descrição da empresa perdida no hero
-- Sem call-to-action claro além de "inscrever-se"
-
-## Solução Proposta
-
-Redesenhar `src/pages/CompanyPage.tsx` mantendo a mesma estrutura de dados (sem mudanças em hooks ou banco).
-
-### 1. Hero Redesenhado — Estilo Institucional
-
-```text
-┌──────────────────────────────────────────────────────────┐
-│  [bg pattern sutil + gradiente da marca rose-red]        │
-│                                                          │
-│   ┌────┐                                                 │
-│   │LOGO│  CENTER FRIOS                    [Verificada ✓] │
-│   │80px│  Máquinas e Equipamentos Ltda                   │
-│   └────┘                                                 │
-│                                                          │
-│   Descrição em parágrafo limpo, max 2 linhas, alto       │
-│   contraste, fonte body confortável.                     │
-│                                                          │
-│   🌐 site.com   in   ig   yt              📅 12 eventos  │
-└──────────────────────────────────────────────────────────┘
+### 1a. Novos eventos (código)
+Em `src/pages/dashboard/CreateEvent.tsx`, atualizar `defaultFields`:
+```ts
+const defaultFields = [
+  { label: "Nome Completo", field_type: "text", required: true, position: 0 },
+  { label: "Endereço de E-mail", field_type: "email", required: true, position: 1 },
+  { label: "WhatsApp", field_type: "tel", required: true, position: 2 },
+  { label: "Empresa", field_type: "text", required: false, position: 3 },
+  { label: "Cargo", field_type: "text", required: false, position: 4 },
+];
 ```
 
-- Logo 80x80, rounded-2xl, sombra suave, borda branca
-- Nome em Bricolage Grotesque, text-4xl/5xl
-- Badge "Organizador verificado" pequeno ao lado
-- Descrição em texto sólido `text-foreground/80` (passa AA)
-- Linha de stats: total de eventos + total de participantes (autoridade)
-- Ícones sociais maiores (44x44), com fundo neutro adaptado a light/dark, hover com cor da marca
-- Substituir `cdn.simpleicons.org/.../ffffff` por versão neutra que respeita tema (ou usar `lucide-react` quando possível: Globe, Mail, Linkedin, Instagram, Facebook, Youtube, Twitter, Github)
+### 1b. Eventos existentes (dados)
+Inserir o campo "WhatsApp" como obrigatório em todos os eventos atuais que ainda não tenham, via tool de insert (sem migração).
 
-### 2. Barra de Stats / Filtros
+### 1c. Validação no formulário público
+`src/pages/Register.tsx` — adicionar máscara/validação leve para WhatsApp brasileiro (ex.: `(11) 99999-9999`) e mensagem de erro clara.
 
-Logo abaixo do hero, uma barra com:
-- "X próximos · Y realizados" (texto descritivo)
-- Toggle Grid/List mais polido com `aria-pressed` e labels acessíveis
-- (Opcional) busca por nome de evento
+---
 
-### 3. Seção "Próximos Eventos"
+## 2. E-mail de confirmação com QR Code
 
-Cards redesenhados:
-- Aspect ratio `16/10` consistente
-- Overlay gradient sutil só na parte inferior
-- Data em pill destacado no canto superior esquerdo da imagem (estilo "save the date")
-- Título text-xl, line-clamp-2
-- Metadata em linha clean: 📍 local · 👥 X inscritos
-- CTA "Inscrever-se →" como link semântico (não botão dentro de Link)
-- Hover: leve elevação + borda sutil rose-red
+### 2a. Pré-requisito: domínio de e-mail
+O projeto **ainda não tem domínio de e-mail configurado**. O usuário precisa configurar um domínio remetente antes de enviarmos e-mails. Após o domínio ser configurado, prossigo automaticamente com:
+- Configuração da infraestrutura de e-mail (filas, log, supressão).
+- Criação do template transacional `event-registration-confirmation`.
+- Criação da Edge Function `send-transactional-email`.
 
-### 4. Seção "Eventos Anteriores"
+### 2b. Template do e-mail (`registration-confirmation.tsx`)
+Conteúdo do e-mail:
+- Saudação com o nome do inscrito.
+- Confirmação: "Sua inscrição em **{nome do evento}** foi confirmada!"
+- Bloco com **detalhes do evento**: data/hora (com timezone), local (físico/virtual + link), descrição curta.
+- **Cartão de presença com QR Code** (imagem PNG embutida via data URL, gerada no servidor com `qrcode` em Deno, contendo a URL `https://<app>/check-in/<registration_id>`).
+- Aviso destacado: "🎁 **Apresente este QR Code na entrada para validar sua participação no sorteio de brindes.**"
+- Rodapé com identidade da empresa organizadora (nome do organizador puxado do perfil).
 
-- Mesmos cards, mas com:
-  - Overlay grayscale leve na imagem (visualmente "passado")
-  - Badge "Realizado" no lugar da data
-  - CTA muda para "Ver detalhes" (sem incentivo a inscrição)
+Estilo: branco (#ffffff) de fundo, cores da marca (rose-red HSL 340 75% 58%) para CTA e acentos, tipografia segura para e-mail.
 
-### 5. Footer Institucional
+### 2c. Disparo do e-mail
+Modificar `src/hooks/useRegistrations.ts` (`useCreateRegistration`): após `register_for_event` retornar com sucesso, invocar `supabase.functions.invoke('send-transactional-email', { body: { templateName: 'registration-confirmation', recipientEmail, idempotencyKey: 'reg-confirm-${registrationId}', templateData: { name, eventName, eventDate, location, registrationId, organizerName } } })`.
 
-Adicionar pequeno footer com:
-- Nome da empresa
-- Link "Ver mais empresas" → `/events` (página pública de eventos)
-- Link sutil "Powered by meuevento"
+A Edge Function busca o evento + perfil do organizador, gera o QR Code como data URL e injeta no template como prop.
 
-### 6. Correções de Acessibilidade (WCAG 2.1 AA)
+### 2d. Página de validação `/check-in/:registrationId`
+Nova rota pública somente leitura que mostra:
+- Nome do inscrito, evento, data.
+- Status: "✅ Inscrição válida" ou "⚠️ Inscrição cancelada / não encontrada".
+- (Futuro: organizador autenticado pode marcar como "presente".)
 
-- Adicionar `<main>` wrapping
-- Toggle: `<button role="tab" aria-pressed aria-label="Visualizar em grade">`
-- Imagens: alt descritivo (`alt={`Capa do evento ${event.name}`}`)
-- Links externos: `aria-label="Visite nosso LinkedIn (abre em nova aba)"`
-- Ícones decorativos: `aria-hidden="true"`
-- Resolver link aninhado: card vira `<article>` com `<Link>` interno cobrindo título + imagem; botão "Inscrever-se" é parte do mesmo Link via `stretched-link` pattern (pseudo-element `::after`)
-- Foco visível: `focus-visible:ring-2 ring-primary ring-offset-2`
-- Cores: garantir contraste mínimo 4.5:1 no texto sobre hero (testar com texto sólido `text-foreground` em fundo claro com pattern, não gradiente sobre imagem)
-- Pular testes de degradê — usar fundo sólido suave + ornamento decorativo
-- Skip link "Pular para conteúdo" no topo
+---
 
-### 7. Estados Vazios e Loading
+## 3. Animação comemorativa de "Obrigado"
 
-- Skeleton mais fiel ao novo layout
-- Empty state com ilustração (ícone grande Calendar) e mensagem amigável
-- Estado de erro acessível com `role="alert"`
+### 3a. Instalar `canvas-confetti`
+Pacote leve para disparar confetes coloridos.
 
-## Arquivos Afetados
+### 3b. Atualizar `SuccessCard` em `src/pages/Register.tsx`
+- Disparar confete contínuo (3 bursts) ao montar o componente.
+- Substituir o card discreto por uma tela mais empolgante:
+  - Ícone grande animado (CheckCircle com bounce).
+  - Headline: "🎉 Obrigado, {primeiro nome}!"
+  - Subtexto: "Sua presença em **{evento}** está garantida."
+  - Mensagem secundária: "Enviamos seu **cartão de presença com QR Code** para o seu e-mail. Apresente-o na entrada para concorrer aos brindes!"
+  - Botões: "Adicionar ao calendário" (gera link .ics) + "Compartilhar".
+- Animação framer-motion: scale-in + fade + leve rotação no ícone.
 
-- **`src/pages/CompanyPage.tsx`** — reescrita completa do componente (mantém hooks atuais e roteamento)
+---
 
-Nenhuma mudança em:
-- Banco de dados / RLS
-- Hooks (`usePublicCompany.ts`)
-- Rotas (`App.tsx`)
-- Componentes compartilhados
+## Arquivos afetados
 
-## Detalhes Técnicos
+- **Editar**: `src/pages/dashboard/CreateEvent.tsx`, `src/pages/Register.tsx`, `src/hooks/useRegistrations.ts`, `src/App.tsx` (nova rota).
+- **Criar**: `src/pages/CheckIn.tsx`, `supabase/functions/_shared/transactional-email-templates/registration-confirmation.tsx`, edge functions de e-mail.
+- **Dados**: insert de campo "WhatsApp" obrigatório em eventos existentes.
+- **Pacote**: adicionar `canvas-confetti` + `@types/canvas-confetti`.
 
-- Continua usando shadcn/ui (`Card`, `Button`, `Skeleton`, `Badge`)
-- Adiciona ícones de `lucide-react` (já disponível): `Globe`, `Mail`, `Linkedin`, `Instagram`, `Facebook`, `Youtube`, `Twitter`, `Github`, `BadgeCheck`, `Calendar`, `MapPin`, `Users`, `ArrowRight`, `LayoutGrid`, `List`
-- Locale `date-fns/locale/pt-BR` para datas em português ("Qua, 16 de abr · 19:00")
-- Tipografia: Bricolage Grotesque para títulos, DM Sans para corpo (já configurado)
-- Responsivo: 1 col mobile → 2 sm → 3 lg
-- Suporta light + dark mode (default light, conforme regra do projeto)
+## Pré-requisito bloqueante
 
+Antes de eu prosseguir com a parte de e-mail, é necessário configurar um **domínio de envio de e-mails** (ex.: `notify.centerfrios.com.br`). É um passo único que melhora a entregabilidade e mostra os e-mails como vindos da sua marca. Vou seguir com as outras três mudanças (WhatsApp, QR Code na página de check-in, animação comemorativa) em paralelo, e a parte de e-mail é ativada assim que o domínio estiver pronto.
+
+<lov-actions>
+<lov-open-email-setup>Configurar domínio de e-mail</lov-open-email-setup>
+</lov-actions>
