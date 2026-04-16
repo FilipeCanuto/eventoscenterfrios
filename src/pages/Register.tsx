@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useParams } from "react-router-dom";
-import { CalendarDays, MapPin, Video, Globe, Loader2, CheckCircle2, Zap, PartyPopper, Mail, QrCode } from "lucide-react";
+import { CalendarDays, MapPin, Video, Globe, Loader2, Zap, PartyPopper, Mail, QrCode } from "lucide-react";
 import { useEventBySlug, Event } from "@/hooks/useEvents";
 import { useFormFields } from "@/hooks/useFormFields";
 import { useCreateRegistration } from "@/hooks/useRegistrations";
@@ -227,13 +227,6 @@ const RegistrationForm = ({
   </form>
 );
 
-const FlyerImage = ({ flyerUrl, eventName, className = "" }: { flyerUrl: string | null; eventName: string; className?: string }) => (
-  flyerUrl ? (
-    <div className={`flex items-start justify-center bg-muted ${className}`}>
-      <img src={flyerUrl} alt={eventName} className="w-full h-full object-contain" />
-    </div>
-  ) : null
-);
 
 const PoweredBy = () => (
   <p className="text-center text-xs text-muted-foreground mt-6">
