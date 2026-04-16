@@ -21,8 +21,14 @@ export default function EventQuickInfo({ event, onUpdate }: Props) {
     const file = e.target.files?.[0];
     if (!file) return;
 
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      toast.error("Sessão expirada");
+      return;
+    }
+
     const ext = file.name.split(".").pop();
-    const path = `event-images/${event.id}.${ext}`;
+    const path = `${user.id}/event-images/${event.id}.${ext}`;
 
     const { error } = await supabase.storage
       .from("event-assets")
