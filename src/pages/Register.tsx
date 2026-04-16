@@ -1,17 +1,18 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useParams } from "react-router-dom";
-import { CalendarDays, MapPin, Video, Globe, Loader2, CheckCircle2, Zap } from "lucide-react";
+import { CalendarDays, MapPin, Video, Globe, Loader2, CheckCircle2, Zap, PartyPopper, Mail, QrCode } from "lucide-react";
 import { useEventBySlug, Event } from "@/hooks/useEvents";
 import { useFormFields } from "@/hooks/useFormFields";
 import { useCreateRegistration } from "@/hooks/useRegistrations";
 import { toast } from "sonner";
 import { motion } from "framer-motion";
 import { Tables } from "@/integrations/supabase/types";
+import confetti from "canvas-confetti";
 
 type FormField = Tables<"form_fields">;
 
@@ -50,19 +51,75 @@ function formatEventDateTime(event: Event) {
 
 // ─── Extracted stable components ───
 
-const SuccessCard = ({ brandColor, eventName }: { brandColor: string; eventName: string }) => (
-  <motion.div key="success" initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} className="w-full max-w-lg mx-auto">
-    <Card className="border-border shadow-2xl">
-      <CardContent className="p-8 text-center">
-        <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ type: "spring", delay: 0.2 }}>
-          <CheckCircle2 className="w-16 h-16 mx-auto mb-4" style={{ color: brandColor }} />
-        </motion.div>
-        <h2 className="text-2xl font-display font-bold mb-2">Inscrição confirmada!</h2>
-        <p className="text-muted-foreground">Obrigado por se inscrever em <strong>{eventName}</strong>. Você receberá um e-mail de confirmação em breve.</p>
-      </CardContent>
-    </Card>
-  </motion.div>
-);
+// ─── WhatsApp helpers ───
+function isWhatsAppField(label: string) {
+  const l = label.toLowerCase();
+  return l.includes("whatsapp") || l.includes("celular") || l.includes("telefone");
+}
+function maskBRPhone(value: string) {
+  const digits = value.replace(/\D/g, "").slice(0, 11);
+  if (digits.length <= 2) return digits.length ? `(${digits}` : "";
+  if (digits.length <= 6) return `(${digits.slice(0, 2)}) ${digits.slice(2)}`;
+  if (digits.length <= 10) return `(${digits.slice(0, 2)}) ${digits.slice(2, 6)}-${digits.slice(6)}`;
+  return `(${digits.slice(0, 2)}) ${digits.slice(2, 7)}-${digits.slice(7)}`;
+}
+function isValidBRPhone(value: string) {
+  const digits = value.replace(/\D/g, "");
+  return digits.length === 10 || digits.length === 11;
+}
+
+const SuccessCard = ({ brandColor, eventName, name }: { brandColor: string; eventName: string; name: string }) => {
+  const firstName = (name || "").trim().split(/\s+/)[0] || "";
+
+  useEffect(() => {
+    const colors = [brandColor, "#FFD166", "#06D6A0", "#118AB2", "#EF476F"];
+    const fire = (delay: number, opts: confetti.Options) => {
+      setTimeout(() => confetti({ colors, ...opts }), delay);
+    };
+    fire(0, { particleCount: 120, spread: 80, origin: { y: 0.6 } });
+    fire(250, { particleCount: 80, angle: 60, spread: 60, origin: { x: 0, y: 0.7 } });
+    fire(500, { particleCount: 80, angle: 120, spread: 60, origin: { x: 1, y: 0.7 } });
+  }, [brandColor]);
+
+  return (
+    <motion.div key="success" initial={{ opacity: 0, scale: 0.92 }} animate={{ opacity: 1, scale: 1 }} transition={{ type: "spring", stiffness: 120 }} className="w-full max-w-lg mx-auto">
+      <Card className="border-border shadow-2xl overflow-hidden">
+        <div className="h-2" style={{ background: `linear-gradient(90deg, ${brandColor}, ${brandColor}80)` }} />
+        <CardContent className="p-8 text-center">
+          <motion.div
+            initial={{ scale: 0, rotate: -20 }}
+            animate={{ scale: 1, rotate: 0 }}
+            transition={{ type: "spring", stiffness: 200, delay: 0.15 }}
+            className="w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-5"
+            style={{ background: `${brandColor}15` }}
+          >
+            <PartyPopper className="w-10 h-10" style={{ color: brandColor }} />
+          </motion.div>
+          <motion.h2 initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }} className="text-3xl font-display font-bold mb-2">
+            🎉 Obrigado{firstName ? `, ${firstName}` : ""}!
+          </motion.h2>
+          <motion.p initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.4 }} className="text-muted-foreground mb-6">
+            Sua presença em <strong className="text-foreground">{eventName}</strong> está garantida.
+          </motion.p>
+          <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.5 }} className="bg-muted/40 rounded-xl p-4 text-left space-y-3">
+            <div className="flex items-start gap-3">
+              <Mail className="w-5 h-5 mt-0.5 shrink-0" style={{ color: brandColor }} />
+              <p className="text-sm">
+                Enviamos seu <strong>cartão de presença com QR Code</strong> para o seu e-mail.
+              </p>
+            </div>
+            <div className="flex items-start gap-3">
+              <QrCode className="w-5 h-5 mt-0.5 shrink-0" style={{ color: brandColor }} />
+              <p className="text-sm">
+                Apresente o QR Code na entrada para validar sua presença e <strong>concorrer aos brindes</strong> 🎁.
+              </p>
+            </div>
+          </motion.div>
+        </CardContent>
+      </Card>
+    </motion.div>
+  );
+};
 
 const EventInfo = ({ event, className = "" }: { event: Event; className?: string }) => {
   const [expanded, setExpanded] = useState(false);
