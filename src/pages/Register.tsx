@@ -288,6 +288,11 @@ const Register = () => {
       toast.error(`Preencha: ${missing.map(f => f.label).join(", ")}`);
       return;
     }
+    const invalidPhone = formFields?.find(f => f.required && isWhatsAppField(f.label) && !isValidBRPhone(formData[f.label] || ""));
+    if (invalidPhone) {
+      toast.error("Informe um WhatsApp válido com DDD (ex.: (11) 99999-9999).");
+      return;
+    }
     try {
       await createReg.mutateAsync({ event_id: event.id, data: formData });
       setSubmitted(true);
