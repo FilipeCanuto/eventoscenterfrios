@@ -1,55 +1,66 @@
 
 
-# Remover Controles de Páginas Públicas & Alterar CTA da Landing
+# Atualização de Copy da Primeira Dobra - Landing Page Centerfrios
 
-O usuário quer garantir que visitantes não autenticados tenham apenas acesso de visualização/navegação — sem botões de configuração, criação de eventos ou alteração de temas. Além disso, o botão "Começar agora" na página principal (/) deve mudar para "Conhecer eventos" (mantendo a seta).
-
-## Análise da Situação Atual
-
-**Páginas públicas identificadas:**
-1. **Landing (`/`)** — src/pages/Landing.tsx  
-   - Atualmente mostra botões "Começar agora" → precisa mudar para "Conhecer eventos"
-   - Navbar com "Entrar" e "Criar conta" → OK (são CTAs de autenticação, não de configuração)
-   - Não possui botões de configuração visíveis
-   
-2. **PublicEvents (`/events`)** — src/pages/PublicEvents.tsx  
-   - Já tem controle correto: usuários não logados veem "Entrar" e "Criar conta"
-   - Usuários logados veem "Meu painel"
-   - Não possui botões de configuração
-   
-3. **CompanyPage (`/company/:slug`)** — src/pages/CompanyPage.tsx  
-   - Página pública que exibe perfil de empresa e eventos
-   - Precisa verificar se há botões de edição/configuração
-
-4. **Register (`/register/:slug`)** — src/pages/Register.tsx  
-   - Formulário de inscrição — não possui controles administrativos
-   - Footer "Powered by Centerfrios" → OK
-
-## Problemas Identificados
-
-Após análise, as páginas públicas já estão relativamente limpas, mas precisamos:
-
-1. **Landing.tsx (linha 484):** Alterar o texto do botão de "Começar agora" para "Conhecer eventos" e ajustar o destino do link de `/auth` para `/events`
-
-2. **Verificar CompanyPage.tsx:** Garantir que não existam botões de edição/configuração visíveis para visitantes não autenticados
+O usuário solicitou mudanças específicas de copy na primeira dobra da landing page (`src/pages/Landing.tsx`), sem alterar o layout ou o design. As alterações são:
 
 ## Mudanças Necessárias
 
-### 1. src/pages/Landing.tsx (linha 484)
-**Atual:**
-```tsx
-<Button size="lg" className="text-base font-semibold px-8 h-12" asChild>
-  <Link to="/auth">Começar agora <ArrowRight className="ml-2 w-4 h-4" /></Link>
-</Button>
+### 1. H1 - Título Principal (linhas 459-478)
+
+**Texto atual:**
+```
+A plataforma de eventos
+onde ideias viram [eventos.|experiências.|comunidades.|conexões.]
 ```
 
-**Novo:**
-```tsx
-<Button size="lg" className="text-base font-semibold px-8 h-12" asChild>
-  <Link to="/events">Conhecer eventos <ArrowRight className="ml-2 w-4 h-4" /></Link>
-</Button>
+**Novo texto:**
+```
+A central oficial da CENTERFRIOS que impulsiona [comunidades|conexões|experiências|eventos].
 ```
 
-### 2. Verificar CompanyPage.tsx
-Preciso visualizar mais do arquivo para confirmar se há botões de edição que precisam ser removidos ou condicionados ao status de autenticação.
+- A alternância de palavras continua funcionando (array `rotatingWords` na linha 166)
+- Atualizar o array para: `["comunidades.", "conexões.", "experiências.", "eventos."]`
+- Reordenar a estrutura do H1 para o novo formato em linha única
+
+### 2. Texto Secundário - Subtítulo (linhas 479-482)
+
+**Texto atual:**
+```
+Seja qual for o seu evento — de workshops a conferências — crie páginas de inscrição
+personalizadas, acompanhe participantes e faça sua comunidade crescer. Sem código.
+```
+
+**Novo texto:**
+```
+Dos próximos encontros aos eventos já realizados, aqui você encontra tudo em um só lugar: informações, destaques e registros para acompanhar o que vem pela frente e revisitar o que já aconteceu.
+```
+
+### 3. CTA - Botão (linha 484)
+
+**Texto atual:**
+```
+Conhecer eventos
+```
+
+**Novo texto:**
+```
+Ver todos os eventos
+```
+
+O link continua apontando para `/events` e o ícone `<ArrowRight>` é mantido.
+
+## Arquivos Afetados
+
+- **src/pages/Landing.tsx**
+  - Linha 166: Atualizar array `rotatingWords`
+  - Linhas 459-478: Reestruturar o H1
+  - Linhas 479-482: Substituir texto do parágrafo
+  - Linha 484: Alterar texto do botão
+
+## Observações Técnicas
+
+- A funcionalidade de rotação de palavras (`wordIndex`, `AnimatePresence`, `motion.span`) permanece intacta
+- O layout, espaçamento, classes CSS e animações não são modificados
+- A estrutura de navegação e links permanece inalterada
 
