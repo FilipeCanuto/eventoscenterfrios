@@ -481,7 +481,7 @@ const Landing = () => {
                 personalizadas, acompanhe participantes e faça sua comunidade crescer. Sem código.
               </p>
               <Button size="lg" className="text-base font-semibold px-8 h-12" asChild>
-                <Link to="/auth">Começar agora <ArrowRight className="ml-2 w-4 h-4" /></Link>
+                <Link to="/events">Conhecer eventos <ArrowRight className="ml-2 w-4 h-4" /></Link>
               </Button>
             </motion.div>
           </div>
