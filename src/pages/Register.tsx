@@ -19,34 +19,31 @@ type FormField = Tables<"form_fields">;
 // ─── Helper: format event date/time with timezone ───
 function formatEventDateTime(event: Event) {
   const tz = event.timezone || "America/Sao_Paulo";
-  const parts: string[] = [];
+  if (!event.event_date) return "";
 
-  if (event.event_date) {
-    const start = new Date(event.event_date);
-    const dateStr = start.toLocaleDateString("pt-BR", { month: "short", day: "numeric", year: "numeric", timeZone: tz });
-    const timeStr = start.toLocaleTimeString("pt-BR", { hour: "numeric", minute: "2-digit", timeZone: tz });
+  const start = new Date(event.event_date);
+  const dateStr = start.toLocaleDateString("pt-BR", { month: "short", day: "numeric", year: "numeric", timeZone: tz });
+  
+  const formatTime = (date: Date) => {
+    const t = date.toLocaleTimeString("pt-BR", { hour: "numeric", minute: "2-digit", timeZone: tz });
+    return t.replace(":00", "h").replace(":", "h");
+  };
+  
+  const timeStr = formatTime(start);
+  const tzAbbr = start.toLocaleTimeString("pt-BR", { timeZone: tz, timeZoneName: "short" }).split(" ").pop() || tz;
 
-    let line = `${dateStr} · ${timeStr}`;
+  if (event.event_end_date) {
+    const end = new Date(event.event_end_date);
+    const endDateStr = end.toLocaleDateString("pt-BR", { month: "short", day: "numeric", year: "numeric", timeZone: tz });
+    const endTimeStr = formatTime(end);
 
-    if (event.event_end_date) {
-      const end = new Date(event.event_end_date);
-      const endDateStr = end.toLocaleDateString("pt-BR", { month: "short", day: "numeric", year: "numeric", timeZone: tz });
-      const endTimeStr = end.toLocaleTimeString("pt-BR", { hour: "numeric", minute: "2-digit", timeZone: tz });
-
-      if (endDateStr === dateStr) {
-        line += ` – ${endTimeStr}`;
-      } else {
-        line += ` – ${endDateStr} · ${endTimeStr}`;
-      }
+    if (endDateStr === dateStr) {
+      return `${dateStr} · ${timeStr} - ${endTimeStr} ${tzAbbr}`;
     }
-
-    const tzAbbr = start.toLocaleTimeString("pt-BR", { timeZone: tz, timeZoneName: "short" }).split(" ").pop() || tz;
-    line += ` ${tzAbbr}`;
-
-    parts.push(line);
+    return `${dateStr} – ${endDateStr} ·${timeStr} - ${endTimeStr} ${tzAbbr}`;
   }
 
-  return parts.join("");
+  return `${dateStr} · ${timeStr} ${tzAbbr}`;
 }
 
 // ─── Extracted stable components ───
@@ -243,7 +240,7 @@ const RegistrationForm = ({
 
 const PoweredBy = () => (
   <p className="text-center text-xs text-muted-foreground mt-6">
-    Powered by <span className="font-semibold">Centerfrios</span>
+    Powered by <span className="font-semibold">CENTERFRIOS</span>
   </p>
 );
 
