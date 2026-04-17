@@ -12,6 +12,7 @@ import { useCreateRegistration } from "@/hooks/useRegistrations";
 import { toast } from "sonner";
 import { motion } from "framer-motion";
 import { Tables } from "@/integrations/supabase/types";
+import { supabase } from "@/integrations/supabase/client";
 import confetti from "canvas-confetti";
 
 type FormField = Tables<"form_fields">;
