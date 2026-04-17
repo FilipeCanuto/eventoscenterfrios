@@ -1,11 +1,12 @@
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useMemo, useRef } from "react";
+import { Helmet } from "react-helmet-async";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
-import { useParams } from "react-router-dom";
-import { CalendarDays, MapPin, Video, Globe, Loader2, Zap, PartyPopper, Mail, QrCode } from "lucide-react";
+import { useParams, useSearchParams } from "react-router-dom";
+import { CalendarDays, MapPin, Video, Globe, Loader2, Zap, PartyPopper, Mail, QrCode, Clock } from "lucide-react";
 import { useEventBySlug, Event } from "@/hooks/useEvents";
 import { useFormFields } from "@/hooks/useFormFields";
 import { useCreateRegistration } from "@/hooks/useRegistrations";
