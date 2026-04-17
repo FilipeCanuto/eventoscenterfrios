@@ -479,12 +479,39 @@ const Register = () => {
     }
     try {
       const utms = utmsRef.current || {};
-      await createReg.mutateAsync({ event_id: event.id, data: formData, tracking: utms });
+      const registrationId = (await createReg.mutateAsync({ event_id: event.id, data: formData, tracking: utms })) as unknown as string;
       // Analytics-ready event (Meta Pixel / GA4 / GTM can hook into this)
       try {
         (window as any).dataLayer = (window as any).dataLayer || [];
         (window as any).dataLayer.push({ event: "lead_registered", event_name: event.name, event_id: event.id, ...utms });
       } catch {}
+      // Fire-and-forget confirmation email via Resend
+      try {
+        const recipientEmail = formData["Email Address"] || formData["Email"] || formData["E-mail"] || formData["email"] || "";
+        const recipientName = formData["Nome Completo"] || formData["Nome"] || formData["Name"] || "";
+        if (registrationId && recipientEmail) {
+          supabase.functions.invoke("send-registration-confirmation", {
+            body: {
+              registrationId,
+              eventId: event.id,
+              recipientEmail,
+              recipientName,
+              eventName: event.name,
+              eventDate: event.event_date,
+              eventEndDate: event.event_end_date,
+              timezone: event.timezone,
+              locationType: event.location_type,
+              locationValue: event.location_value,
+              eventSlug: event.slug,
+              primaryColor: event.primary_color,
+              logoUrl: event.logo_url,
+              origin: typeof window !== "undefined" ? window.location.origin : null,
+            },
+          }).catch((err) => console.warn("Confirmation email failed:", err));
+        }
+      } catch (err) {
+        console.warn("Confirmation email dispatch error:", err);
+      }
       setSubmitted(true);
     } catch (err: any) {
       toast.error(err.message || "Falha na inscrição");
