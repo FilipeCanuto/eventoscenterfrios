@@ -1,76 +1,65 @@
-
-
-## Objetivo
-
-Garantir que o link `/register/circuito-experience-centerfrios-skymsen-rq0bmz` seja a porta de entrada direta do lead, sem login, sem etapas intermediárias, e sem qualquer barreira que atrapalhe a conversão vinda de anúncios e landing pages externas.
-
 ## Diagnóstico
 
-Verifiquei `src/App.tsx`: a rota `/register/:slug` já é **pública** (não está dentro de `<ProtectedRoute>`). Tecnicamente, qualquer pessoa com o link consegue acessar e se inscrever sem login — o backend usa a função pública `register_for_event`.
+O elemento selecionado mostra "5 de mai. de 2026 – 8 de mai. de 2026 ·11h - 15h BRT" — uma linha única e densa, difícil de escanear. Os horários atuais (11h–15h) também estão errados; o correto é 14h–18h BRT.
 
-Porém, revisando o componente `src/pages/Register.tsx` e o fluxo atual, identifiquei pontos de fricção que podem afastar o lead vindo de anúncio:
+Verifiquei via `lsp` que o texto vem da função `formatEventDateTime(event)` em `src/pages/Register.tsx`, que lê `event.event_date` e `event.event_end_date`. Ou seja, o horário "11h - 15h" reflete os dados salvos no banco para este evento — não está hardcoded.
 
-1. **Possível redirecionamento ou tela de espera** — preciso confirmar se há algum `useEffect` que checa autenticação ou faz redirect.
-2. **Header/navbar com links** que podem tirar o lead da página (voltar ao site, ver outros eventos, fazer login).
-3. **Carregamento lento ou flash de conteúdo** — se o lead vê um spinner longo ou conteúdo "piscando", pode desistir.
-4. **CTA do formulário** pode não estar destacado o suficiente como primeira ação visual.
-5. **Campos opcionais excessivos** podem espantar — manter só Nome, E-mail e WhatsApp em destaque (já está, conforme última edição).
-6. **Open Graph / metatags** — quando o link é compartilhado em anúncios (Meta Ads, WhatsApp), precisa exibir prévia rica (imagem do evento, título, descrição) para aumentar CTR.
-7. **Landing externa** — facilitar para que landing pages externas (ex.: do anunciante) consigam embedar ou redirecionar diretamente para essa URL.
+Há, portanto, duas frentes:
 
-## Plano de Ação
+1. **Dados** — corrigir o horário no banco para 14h–18h (BRT = UTC-3, então `2026-05-05 17:00:00Z` até `2026-05-08 21:00:00Z`).
+2. **Apresentação** — reformatar o bloco de data/hora para ser mais escaneável, visual e profissional.
 
-### 1. Confirmar acesso 100% público (sem login)
-Inspecionar `src/pages/Register.tsx` e remover qualquer:
-- Verificação de sessão (`useAuth`, `user`, redirect para `/auth`).
-- Botões de login/cadastro no header da própria página.
-- Links de navegação que tirem o lead do contexto de inscrição.
+## Plano
 
-### 2. Layout focado em conversão (landing-style)
-- Esconder qualquer navbar global na rota `/register/:slug`.
-- Manter apenas: logo da empresa organizadora (sem link para outras páginas) + flyer + título + formulário + CTA.
-- Botão de inscrição grande, em destaque (`h-12`, `rounded-full`, primary color), texto claro: "Garantir minha vaga".
-- Acima do formulário, microcopy de urgência sutil: data + local + "Inscrição gratuita em menos de 1 minuto".
+### 1. Corrigir os dados do evento
 
-### 3. Carregamento otimizado
-- Skeleton mínimo (sem flashes).
-- Carregar dados do evento e campos do formulário em paralelo.
-- Pré-renderizar título/descrição assim que disponível (sem esperar tudo).
+Migration UPDATE no evento `circuito-experience-centerfrios-skymsen-rq0bmz`:
 
-### 4. SEO + Open Graph dinâmico
-Adicionar `react-helmet-async` (ou tags diretas via `useEffect`) na página de registro para:
-- `<title>` = "Inscreva-se · {nome do evento}"
-- `<meta name="description">` = descrição curta do evento
-- `<meta property="og:title">`, `og:description`, `og:image` (flyer do evento), `og:url`
-- `<meta name="twitter:card" content="summary_large_image">`
+- `event_date` → `2026-05-05 17:00:00+00` (14h BRT)
+- `event_end_date` → `2026-05-08 21:00:00+00` (18h BRT)
+- `timezone` → `America/Sao_Paulo`
 
-Isso garante que o link compartilhado em anúncios e WhatsApp mostre prévia rica.
+### 2. Redesenhar o bloco de data/hora (em `src/pages/Register.tsx`)
 
-### 5. UTM tracking pronto para anúncios
-Capturar parâmetros `utm_source`, `utm_medium`, `utm_campaign` da URL e:
-- Salvar como metadata na inscrição (campo `data` ou novo campo `metadata` no insert).
-- Persistir em `sessionStorage` para sobreviver a refresh.
+Em vez de uma linha corrida, usar um pequeno **"date card" horizontal** com hierarquia visual clara, padrão usado por Sympla/Eventbrite/Meetup:
 
-Isso permite à equipe medir qual anúncio gerou cada inscrição.
+```text
+┌─────────────────────────────────────────────────┐
+│  📅  5 – 8 de maio de 2026                      │
+│      4 dias · ter a sex                         │
+│  🕐  Das 14h às 18h  (horário de Brasília)      │
+└─────────────────────────────────────────────────┘
+```
 
-### 6. Pixel/analytics ready (opcional, sem código de terceiros agora)
-Disparar evento custom `lead_registered` no `window.dataLayer` (se existir) ao concluir inscrição — facilita plugar Meta Pixel ou GA4 depois sem tocar no código.
+Detalhes:
 
-### 7. Mobile-first reforçado
-- Inputs `h-12`, fonte 16px (evita zoom no iOS).
-- Botão sticky no rodapé em mobile (sempre visível ao rolar).
-- Flyer com altura limitada em mobile para não empurrar o formulário para fora da dobra.
+- **Linha 1 (data)**: ícone `Calendar` + range compacto "5 – 8 de maio de 2026" em fonte de destaque (Bricolage Grotesque, semibold).
+- **Linha 2 (subtexto da data)**: "4 dias · qua a sáb" em `text-sm text-muted-foreground` — dá contexto de duração e dias da semana sem poluir.
+- **Linha 3 (horário)**: ícone `Clock` + "Das 14h às 18h" + "(horário de Brasília)" mais discreto.
+- Quando início e fim estão no mesmo mês/ano, condensar para "5 – 8 de maio de 2026" (em vez de repetir "de 2026" duas vezes).
+- Quando o horário diário é o mesmo nos dois extremos, mostrar uma única faixa "Das Xh às Yh" em vez de "início — fim".
 
-## Arquivos Afetados
+### 3. Lógica do helper `formatEventDateTime`
 
-- **`src/pages/Register.tsx`** — remover qualquer auth/redirect, esconder navbar, reforçar CTA, adicionar metatags OG, capturar UTMs, sticky CTA mobile.
-- **`index.html`** — fallback de metatags base (caso JS demore).
-- **`src/hooks/useRegistrations.ts`** — incluir UTMs no payload da inscrição.
-- **`package.json`** — adicionar `react-helmet-async` (se ainda não houver).
+Refatorar para retornar um objeto estruturado `{ dateRange, durationLabel, timeRange, tzLabel }` em vez de string única, permitindo o layout em múltiplas linhas com ícones. Manter o timezone via `Intl.DateTimeFormat` com `America/Sao_Paulo`.
 
-## Fora de escopo (mas sugerido como próximo passo)
+Cálculo do `durationLabel`:
 
-- Configurar Meta Pixel / Google Tag Manager (precisa dos IDs do anunciante).
-- Criar variantes A/B do CTA.
-- Página de "obrigado" com link de compartilhamento já preenchido para o lead convidar amigos.
+- Diferença em dias + 1 (inclusivo) → "4 dias"
+- Dias da semana abreviados em pt-BR do início e fim → "ter a sex"
 
+### 4. Consistência visual
+
+- Manter ícones `lucide-react` (`Calendar`, `Clock`) já em uso no projeto, tamanho `h-4 w-4`, `text-muted-foreground`.
+- Tipografia: data principal em `font-semibold text-base md:text-lg`, sub-linhas em `text-sm`.
+- Sem bordas (regra do projeto: borderless), apenas espaçamento e hierarquia de cor/peso.
+- Layout responsivo: empilha naturalmente em mobile, fica compacto em desktop.
+
+## Arquivos afetados
+
+- `**src/pages/Register.tsx**` — refatorar `formatEventDateTime` e o JSX do bloco de data/hora (linha ~136).
+- **Migration SQL** — UPDATE do evento para corrigir horários para 14h–18h BRT.
+
+## Fora de escopo
+
+- Não altero outros locais que renderizam data (ex.: cards do dashboard) nesta iteração — foco na página pública de inscrição, conforme contexto do elemento selecionado.
