@@ -36,16 +36,58 @@ export function useRegistrationsByEvent(eventId: string | undefined) {
   });
 }
 
+function detectDevice(): "mobile" | "tablet" | "desktop" {
+  if (typeof navigator === "undefined") return "desktop";
+  const ua = navigator.userAgent || "";
+  if (/iPad|Tablet/i.test(ua)) return "tablet";
+  if (/Mobi|Android|iPhone/i.test(ua)) return "mobile";
+  return "desktop";
+}
+
+function buildTracking(extra: Record<string, string>): Record<string, string> {
+  const tracking: Record<string, string> = { ...extra };
+  if (typeof window !== "undefined") {
+    try {
+      tracking.landing_page = window.location.href.slice(0, 500);
+      const ref = document.referrer;
+      if (ref) tracking.referrer = ref.slice(0, 500);
+    } catch {}
+  }
+  tracking.device_type = detectDevice();
+  tracking.captured_at = new Date().toISOString();
+  return tracking;
+}
+
 export function useCreateRegistration() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async ({ event_id, data }: { event_id: string; data: Record<string, string> }) => {
-      const { data: result, error } = await supabase
-        .rpc("register_for_event", {
-          p_event_id: event_id,
-          p_data: data as unknown as Json,
-        });
+    mutationFn: async ({
+      event_id,
+      data,
+      tracking = {},
+    }: {
+      event_id: string;
+      data: Record<string, string>;
+      tracking?: Record<string, string>;
+    }) => {
+      const fullTracking = buildTracking(tracking);
+      const { data: result, error } = await supabase.rpc("register_for_event", {
+        p_event_id: event_id,
+        p_data: data as unknown as Json,
+        p_tracking: fullTracking as unknown as Json,
+      } as never);
       if (error) {
+        // Fallback for older RPC signature without p_tracking
+        if (/p_tracking|function .* does not exist|argument/i.test(error.message || "")) {
+          const merged: Record<string, string> = { ...data };
+          Object.entries(fullTracking).forEach(([k, v]) => { merged[`__${k}`] = v; });
+          const { data: result2, error: error2 } = await supabase.rpc("register_for_event", {
+            p_event_id: event_id,
+            p_data: merged as unknown as Json,
+          });
+          if (error2) throw error2;
+          return result2;
+        }
         throw error;
       }
       return result;

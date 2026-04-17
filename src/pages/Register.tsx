@@ -1,11 +1,11 @@
-import { useState, useCallback, useEffect, useMemo, useRef } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useParams, useSearchParams } from "react-router-dom";
-import { CalendarDays, MapPin, Video, Globe, Loader2, Zap, PartyPopper, Mail, QrCode, Clock } from "lucide-react";
+import { CalendarDays, MapPin, Video, Globe, Loader2, Zap, PartyPopper, Mail, QrCode, Clock, MessageCircle, Copy, Check } from "lucide-react";
 import { useEventBySlug, Event } from "@/hooks/useEvents";
 import { useFormFields } from "@/hooks/useFormFields";
 import { useCreateRegistration } from "@/hooks/useRegistrations";
@@ -132,8 +132,9 @@ function isValidBRPhone(value: string) {
   return digits.length === 10 || digits.length === 11;
 }
 
-const SuccessCard = ({ brandColor, eventName, name }: { brandColor: string; eventName: string; name: string }) => {
+const SuccessCard = ({ brandColor, eventName, name, shareUrl }: { brandColor: string; eventName: string; name: string; shareUrl: string }) => {
   const firstName = (name || "").trim().split(/\s+/)[0] || "";
+  const [copied, setCopied] = useState(false);
 
   useEffect(() => {
     const colors = [brandColor, "#FFD166", "#06D6A0", "#118AB2", "#EF476F"];
@@ -144,6 +145,18 @@ const SuccessCard = ({ brandColor, eventName, name }: { brandColor: string; even
     fire(250, { particleCount: 80, angle: 60, spread: 60, origin: { x: 0, y: 0.7 } });
     fire(500, { particleCount: 80, angle: 120, spread: 60, origin: { x: 1, y: 0.7 } });
   }, [brandColor]);
+
+  const shareText = `Acabei de garantir minha vaga em ${eventName}! Garanta a sua também:`;
+  const whatsappUrl = `https://wa.me/?text=${encodeURIComponent(`${shareText} ${shareUrl}`)}`;
+
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(shareUrl);
+      setCopied(true);
+      toast.success("Link copiado!");
+      setTimeout(() => setCopied(false), 2000);
+    } catch {}
+  };
 
   return (
     <motion.div key="success" initial={{ opacity: 0, scale: 0.92 }} animate={{ opacity: 1, scale: 1 }} transition={{ type: "spring", stiffness: 120 }} className="w-full max-w-lg mx-auto">
@@ -177,6 +190,20 @@ const SuccessCard = ({ brandColor, eventName, name }: { brandColor: string; even
               <p className="text-sm">
                 Apresente o QR Code na entrada para validar sua presença e <strong>concorrer aos brindes</strong> 🎁.
               </p>
+            </div>
+          </motion.div>
+          <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.65 }} className="mt-6 space-y-3">
+            <p className="text-xs text-muted-foreground">Convide alguém para vir com você:</p>
+            <div className="flex gap-2">
+              <Button asChild variant="outline" className="flex-1 rounded-full h-11">
+                <a href={whatsappUrl} target="_blank" rel="noopener noreferrer">
+                  <MessageCircle className="w-4 h-4 mr-2" /> WhatsApp
+                </a>
+              </Button>
+              <Button onClick={handleCopy} variant="outline" className="flex-1 rounded-full h-11">
+                {copied ? <Check className="w-4 h-4 mr-2 text-success" /> : <Copy className="w-4 h-4 mr-2" />}
+                {copied ? "Copiado" : "Copiar link"}
+              </Button>
             </div>
           </motion.div>
         </CardContent>
@@ -452,9 +479,7 @@ const Register = () => {
     }
     try {
       const utms = utmsRef.current || {};
-      const payload: Record<string, string> = { ...formData };
-      Object.entries(utms).forEach(([k, v]) => { payload[`__${k}`] = v; });
-      await createReg.mutateAsync({ event_id: event.id, data: payload });
+      await createReg.mutateAsync({ event_id: event.id, data: formData, tracking: utms });
       // Analytics-ready event (Meta Pixel / GA4 / GTM can hook into this)
       try {
         (window as any).dataLayer = (window as any).dataLayer || [];
@@ -492,9 +517,10 @@ const Register = () => {
   );
 
   if (submitted) {
+    const shareUrl = typeof window !== "undefined" ? `${window.location.origin}/register/${event.slug}` : "";
     return wrapDark(
       <div className="min-h-screen flex items-center justify-center px-4 py-12 bg-background text-foreground" style={{ background: isDark ? undefined : `linear-gradient(135deg, ${brandColor}15, ${brandColor}05)` }}>
-        <SuccessCard brandColor={brandColor} eventName={event.name} name={formData["Nome Completo"] || formData["Nome"] || formData["Name"] || ""} />
+        <SuccessCard brandColor={brandColor} eventName={event.name} name={formData["Nome Completo"] || formData["Nome"] || formData["Name"] || ""} shareUrl={shareUrl} />
       </div>
     );
   }

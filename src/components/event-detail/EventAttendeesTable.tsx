@@ -20,8 +20,14 @@ const statusLabels: Record<string, string> = {
   cancelled: "Cancelado",
 };
 
-type SortColumn = "name" | "email" | "status" | "date";
+type SortColumn = "name" | "email" | "status" | "date" | "source";
 type SortDir = "asc" | "desc";
+
+function getSource(r: any): string {
+  const t = (r.tracking || {}) as Record<string, string>;
+  const data = (r.data || {}) as Record<string, string>;
+  return (t.utm_source || data.__utm_source || "direto").toString();
+}
 
 const PAGE_SIZE = 15;
 
@@ -50,10 +56,11 @@ export default function EventAttendeesTable({ eventId }: { eventId: string }) {
   const getValue = (r: any, col: SortColumn): string => {
     const data = r.data as Record<string, string>;
     switch (col) {
-      case "name": return (data["Full Name"] || data["Name"] || "").toLowerCase();
-      case "email": return (data["Email Address"] || data["Email"] || "").toLowerCase();
+      case "name": return (r.lead_name || data["Full Name"] || data["Name"] || "").toLowerCase();
+      case "email": return (r.lead_email || data["Email Address"] || data["Email"] || "").toLowerCase();
       case "status": return r.status;
       case "date": return r.created_at;
+      case "source": return getSource(r).toLowerCase();
     }
   };
 
@@ -79,14 +86,16 @@ export default function EventAttendeesTable({ eventId }: { eventId: string }) {
 
   const handleExportCSV = () => {
     if (!filtered?.length) return;
-    const headers = ["Nome", "E-mail", "Status", "Data"];
-    const rows = filtered.map(r => {
+    const headers = ["Nome", "E-mail", "WhatsApp", "Status", "Origem", "Data"];
+    const rows = filtered.map((r: any) => {
       const data = r.data as Record<string, string>;
       return [
-        data["Full Name"] || data["Name"] || "",
-        data["Email Address"] || data["Email"] || "",
+        r.lead_name || data["Full Name"] || data["Name"] || "",
+        r.lead_email || data["Email Address"] || data["Email"] || "",
+        r.lead_whatsapp || data["WhatsApp"] || data["Telefone"] || "",
         statusLabels[r.status] || r.status,
-        format(new Date(r.created_at), "d MMM yyyy", { locale: ptBR }),
+        getSource(r),
+        format(new Date(r.created_at), "d MMM yyyy HH:mm", { locale: ptBR }),
       ];
     });
     const escapeCSV = (val: string): string => {
@@ -138,6 +147,9 @@ export default function EventAttendeesTable({ eventId }: { eventId: string }) {
                   <TableHead className="cursor-pointer select-none" onClick={() => handleSort("email")}>
                     <span className="flex items-center">E-mail <SortIcon col="email" /></span>
                   </TableHead>
+                  <TableHead className="cursor-pointer select-none hidden md:table-cell" onClick={() => handleSort("source")}>
+                    <span className="flex items-center">Origem <SortIcon col="source" /></span>
+                  </TableHead>
                   <TableHead className="cursor-pointer select-none" onClick={() => handleSort("status")}>
                     <span className="flex items-center">Status <SortIcon col="status" /></span>
                   </TableHead>
@@ -147,12 +159,16 @@ export default function EventAttendeesTable({ eventId }: { eventId: string }) {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {paged.map((r) => {
+                {paged.map((r: any) => {
                   const data = r.data as Record<string, string>;
+                  const source = getSource(r);
                   return (
                     <TableRow key={r.id}>
-                      <TableCell className="font-medium">{data["Full Name"] || data["Name"] || "—"}</TableCell>
-                      <TableCell className="text-muted-foreground text-sm">{data["Email Address"] || data["Email"] || "—"}</TableCell>
+                      <TableCell className="font-medium">{r.lead_name || data["Full Name"] || data["Name"] || "—"}</TableCell>
+                      <TableCell className="text-muted-foreground text-sm">{r.lead_email || data["Email Address"] || data["Email"] || "—"}</TableCell>
+                      <TableCell className="hidden md:table-cell">
+                        <Badge variant="outline" className="text-xs rounded-full capitalize">{source}</Badge>
+                      </TableCell>
                       <TableCell>
                         <Badge className={`${statusStyle[r.status] || ""} text-xs`}>{statusLabels[r.status] || r.status.replace("_", " ")}</Badge>
                       </TableCell>

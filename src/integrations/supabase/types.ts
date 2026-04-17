@@ -254,21 +254,33 @@ export type Database = {
           data: Json
           event_id: string
           id: string
+          lead_email: string | null
+          lead_name: string | null
+          lead_whatsapp: string | null
           status: Database["public"]["Enums"]["registration_status"]
+          tracking: Json
         }
         Insert: {
           created_at?: string
           data?: Json
           event_id: string
           id?: string
+          lead_email?: string | null
+          lead_name?: string | null
+          lead_whatsapp?: string | null
           status?: Database["public"]["Enums"]["registration_status"]
+          tracking?: Json
         }
         Update: {
           created_at?: string
           data?: Json
           event_id?: string
           id?: string
+          lead_email?: string | null
+          lead_name?: string | null
+          lead_whatsapp?: string | null
           status?: Database["public"]["Enums"]["registration_status"]
+          tracking?: Json
         }
         Relationships: [
           {
@@ -343,10 +355,12 @@ export type Database = {
         }
         Returns: boolean
       }
-      register_for_event: {
-        Args: { p_data: Json; p_event_id: string }
-        Returns: string
-      }
+      register_for_event:
+        | { Args: { p_data: Json; p_event_id: string }; Returns: string }
+        | {
+            Args: { p_data: Json; p_event_id: string; p_tracking?: Json }
+            Returns: string
+          }
     }
     Enums: {
       app_role: "admin" | "editor" | "viewer"
