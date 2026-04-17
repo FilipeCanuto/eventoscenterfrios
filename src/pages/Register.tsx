@@ -104,6 +104,15 @@ function formatEventDateTimeParts(event: Event): EventDateTimeParts | null {
   return { dateRange, durationLabel, timeRange, tzLabel };
 }
 
+function formatEventDateTime(event: Event): string {
+  const dt = formatEventDateTimeParts(event);
+  if (!dt) return "";
+  const parts = [dt.dateRange];
+  if (dt.timeRange) parts.push(dt.timeRange);
+  if (dt.tzLabel) parts.push(dt.tzLabel);
+  return parts.join(" · ");
+}
+
 // ─── Extracted stable components ───
 
 // ─── WhatsApp helpers ───
