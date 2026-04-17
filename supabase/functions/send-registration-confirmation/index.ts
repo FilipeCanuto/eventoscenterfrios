@@ -8,39 +8,10 @@ const corsHeaders = {
 };
 
 const GATEWAY_URL = "https://connector-gateway.lovable.dev/resend";
-
-// ⚠️ SANDBOX: works only when sending to the Resend account owner's email.
-// To go to production: verify your domain in Resend and change to e.g.
-//   "Centerfrios Eventos <eventos@centerfrios.com.br>"
 const FROM_ADDRESS = "meuevento <onboarding@resend.dev>";
-
-// Very simple in-memory rate limit (per cold start)
-const RATE_BUCKET = new Map<string, { count: number; resetAt: number }>();
-function rateLimited(key: string, max = 3, windowMs = 60_000) {
-  const now = Date.now();
-  const entry = RATE_BUCKET.get(key);
-  if (!entry || entry.resetAt < now) {
-    RATE_BUCKET.set(key, { count: 1, resetAt: now + windowMs });
-    return false;
-  }
-  entry.count++;
-  return entry.count > max;
-}
 
 interface Payload {
   registrationId: string;
-  eventId: string;
-  recipientEmail: string;
-  recipientName?: string;
-  eventName: string;
-  eventDate?: string | null;
-  eventEndDate?: string | null;
-  timezone?: string | null;
-  locationType?: string | null;
-  locationValue?: string | null;
-  eventSlug: string;
-  primaryColor?: string | null;
-  logoUrl?: string | null;
   origin?: string | null;
 }
 
@@ -55,23 +26,32 @@ function fmtDate(iso?: string | null, tz?: string | null) {
   try {
     const d = new Date(iso);
     const date = new Intl.DateTimeFormat("pt-BR", {
-      day: "2-digit",
-      month: "long",
-      year: "numeric",
+      day: "2-digit", month: "long", year: "numeric",
       timeZone: tz || "America/Sao_Paulo",
     }).format(d);
     const time = new Intl.DateTimeFormat("pt-BR", {
-      hour: "2-digit",
-      minute: "2-digit",
+      hour: "2-digit", minute: "2-digit",
       timeZone: tz || "America/Sao_Paulo",
     }).format(d);
     return { date, time };
-  } catch {
-    return null;
-  }
+  } catch { return null; }
 }
 
-function buildHtml(p: Payload, origin: string) {
+interface EmailContext {
+  recipientEmail: string;
+  recipientName: string;
+  eventName: string;
+  eventDate: string | null;
+  eventEndDate: string | null;
+  timezone: string | null;
+  locationType: string | null;
+  locationValue: string | null;
+  eventSlug: string;
+  primaryColor: string | null;
+  logoUrl: string | null;
+}
+
+function buildHtml(p: EmailContext, origin: string) {
   const brand = p.primaryColor || "#E11D74";
   const safeName = escapeHtml(p.recipientName?.trim() || "");
   const greeting = safeName ? `Olá, ${safeName}!` : "Olá!";
@@ -157,42 +137,32 @@ serve(async (req) => {
     }
 
     const body = (await req.json()) as Payload;
-    const required = ["registrationId", "eventId", "recipientEmail", "eventName", "eventSlug"];
-    for (const k of required) {
-      if (!body[k as keyof Payload]) {
-        return new Response(JSON.stringify({ error: `Missing field: ${k}` }), {
-          status: 400,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
-    }
-    if (!/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(body.recipientEmail)) {
-      return new Response(JSON.stringify({ error: "Invalid email" }), {
+    if (!body?.registrationId || typeof body.registrationId !== "string") {
+      return new Response(JSON.stringify({ error: "Missing registrationId" }), {
         status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    const ip = req.headers.get("x-forwarded-for")?.split(",")[0].trim() || "unknown";
-    if (rateLimited(`${ip}:${body.recipientEmail.toLowerCase()}`)) {
-      console.warn("[send-registration-confirmation] Rate limited", ip, body.recipientEmail);
-      return new Response(JSON.stringify({ error: "Too many requests" }), {
-        status: 429,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    // Validate the registration exists (anti-abuse)
     const supabase = createClient(
       Deno.env.get("SUPABASE_URL")!,
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
     );
+
+    // Authoritative lookup: trust ONLY DB-stored values, ignore caller payload.
+    // This blocks the "open relay" attack where an attacker supplies an arbitrary
+    // recipientEmail with someone else's registrationId.
     const { data: reg, error: regErr } = await supabase
       .from("registrations")
-      .select("id, event_id")
+      .select(`
+        id, status, lead_email, lead_name, tracking,
+        events ( id, name, event_date, event_end_date, timezone,
+                 location_type, location_value, slug, primary_color, logo_url )
+      `)
       .eq("id", body.registrationId)
       .maybeSingle();
-    if (regErr || !reg || reg.event_id !== body.eventId) {
+
+    if (regErr || !reg) {
       console.warn("[send-registration-confirmation] Registration not found", body.registrationId);
       return new Response(JSON.stringify({ error: "Registration not found" }), {
         status: 404,
@@ -200,13 +170,61 @@ serve(async (req) => {
       });
     }
 
+    if (reg.status === "cancelled") {
+      return new Response(JSON.stringify({ error: "Registration cancelled" }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    const recipientEmail = (reg.lead_email || "").trim();
+    if (!recipientEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(recipientEmail)) {
+      return new Response(JSON.stringify({ error: "No valid email on registration" }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    const ev = (reg as any).events;
+    if (!ev) {
+      return new Response(JSON.stringify({ error: "Event not found" }), {
+        status: 404,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    // Persistent idempotency: prevents replay-based abuse (sending the same
+    // confirmation repeatedly by re-invoking the function).
+    const tracking = (reg.tracking as Record<string, unknown>) || {};
+    if (tracking.confirmation_email_sent_at) {
+      console.log("[send-registration-confirmation] Already sent, skipping", body.registrationId);
+      return new Response(JSON.stringify({ ok: true, alreadySent: true }), {
+        status: 200,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    const ctx: EmailContext = {
+      recipientEmail,
+      recipientName: reg.lead_name || "",
+      eventName: ev.name,
+      eventDate: ev.event_date,
+      eventEndDate: ev.event_end_date,
+      timezone: ev.timezone,
+      locationType: ev.location_type,
+      locationValue: ev.location_value,
+      eventSlug: ev.slug,
+      primaryColor: ev.primary_color,
+      logoUrl: ev.logo_url,
+    };
+
     const origin =
       body.origin?.replace(/\/$/, "") ||
       req.headers.get("origin")?.replace(/\/$/, "") ||
       "https://eventoscenterfrios.lovable.app";
 
-    const html = buildHtml(body, origin);
-    const subject = `✅ Inscrição confirmada — ${body.eventName}`;
+    const html = buildHtml(ctx, origin);
+    const subject = `✅ Inscrição confirmada — ${ctx.eventName}`;
 
     const resp = await fetch(`${GATEWAY_URL}/emails`, {
       method: "POST",
@@ -217,7 +235,7 @@ serve(async (req) => {
       },
       body: JSON.stringify({
         from: FROM_ADDRESS,
-        to: [body.recipientEmail],
+        to: [recipientEmail],
         subject,
         html,
       }),
@@ -226,21 +244,27 @@ serve(async (req) => {
     const respBody = await resp.text();
     if (!resp.ok) {
       console.error("[send-registration-confirmation] Resend error", resp.status, respBody);
-      // 401/403 => config issue, surface as 502 so it's flagged
       if (resp.status === 401 || resp.status === 403) {
         return new Response(JSON.stringify({ error: "Email auth failed" }), {
           status: 502,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
-      // Other 4xx (e.g., sandbox restriction) — log but don't bubble up to user
       return new Response(
         JSON.stringify({ ok: false, providerStatus: resp.status, providerBody: respBody }),
         { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
     }
 
-    console.log("[send-registration-confirmation] Sent", body.recipientEmail, respBody);
+    // Mark sent for idempotency
+    await supabase
+      .from("registrations")
+      .update({
+        tracking: { ...tracking, confirmation_email_sent_at: new Date().toISOString() },
+      })
+      .eq("id", body.registrationId);
+
+    console.log("[send-registration-confirmation] Sent", recipientEmail);
     return new Response(JSON.stringify({ ok: true }), {
       status: 200,
       headers: { ...corsHeaders, "Content-Type": "application/json" },

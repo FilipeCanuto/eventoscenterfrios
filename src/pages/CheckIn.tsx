@@ -12,9 +12,12 @@ const CheckIn = () => {
     queryKey: ["check-in", registrationId],
     queryFn: async () => {
       if (!registrationId) return null;
+      // PII-safe projection: never expose email/whatsapp/full form data
+      // to anyone holding the registration UUID. Only show the lead name
+      // and event metadata needed to validate entry.
       const { data, error } = await supabase
         .from("registrations")
-        .select("id, status, data, created_at, events(name, event_date, location_value, location_type)")
+        .select("id, status, lead_name, events(name, event_date, location_value, location_type)")
         .eq("id", registrationId)
         .maybeSingle();
       if (error) throw error;
@@ -32,9 +35,7 @@ const CheckIn = () => {
   }
 
   const valid = data && data.status !== "cancelled";
-  const reg = data?.data as Record<string, string> | undefined;
-  const name = reg?.["Nome Completo"] || reg?.name || reg?.Nome || "Inscrito";
-  const email = reg?.["Endereço de E-mail"] || reg?.email || reg?.Email || "";
+  const name = data?.lead_name || "Inscrito";
 
   return (
     <main className="min-h-screen bg-background flex flex-col items-center justify-center px-4 py-12">
@@ -55,12 +56,6 @@ const CheckIn = () => {
                   <p className="text-xs text-muted-foreground">Participante</p>
                   <p className="font-semibold">{name}</p>
                 </div>
-                {email && (
-                  <div>
-                    <p className="text-xs text-muted-foreground">E-mail</p>
-                    <p className="text-sm">{email}</p>
-                  </div>
-                )}
                 {data.events?.name && (
                   <div>
                     <p className="text-xs text-muted-foreground">Evento</p>

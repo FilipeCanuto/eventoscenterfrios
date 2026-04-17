@@ -486,26 +486,14 @@ const Register = () => {
         (window as any).dataLayer = (window as any).dataLayer || [];
         (window as any).dataLayer.push({ event: "lead_registered", event_name: event.name, event_id: event.id, ...utms });
       } catch {}
-      // Fire-and-forget confirmation email via Resend
+      // Fire-and-forget confirmation email. The edge function looks up
+      // recipient/event details from the DB by registrationId — we never
+      // pass an email from the client (prevents open-relay abuse).
       try {
-        const recipientEmail = formData["Email Address"] || formData["Email"] || formData["E-mail"] || formData["email"] || "";
-        const recipientName = formData["Nome Completo"] || formData["Nome"] || formData["Name"] || "";
-        if (registrationId && recipientEmail) {
+        if (registrationId) {
           supabase.functions.invoke("send-registration-confirmation", {
             body: {
               registrationId,
-              eventId: event.id,
-              recipientEmail,
-              recipientName,
-              eventName: event.name,
-              eventDate: event.event_date,
-              eventEndDate: event.event_end_date,
-              timezone: event.timezone,
-              locationType: event.location_type,
-              locationValue: event.location_value,
-              eventSlug: event.slug,
-              primaryColor: event.primary_color,
-              logoUrl: event.logo_url,
               origin: typeof window !== "undefined" ? window.location.origin : null,
             },
           }).catch((err) => console.warn("Confirmation email failed:", err));
