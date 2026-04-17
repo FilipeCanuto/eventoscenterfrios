@@ -1,5 +1,4 @@
 import { useState, useCallback, useEffect, useMemo, useRef } from "react";
-import { Helmet } from "react-helmet-async";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -289,22 +288,48 @@ const Register = () => {
     setFormData(prev => ({ ...prev, [label]: value }));
   }, []);
 
-  const seoHead = event ? (
-    <Helmet>
-      <title>{`Inscreva-se · ${event.name}`}</title>
-      <meta name="description" content={(event.description || `Faça sua inscrição gratuita em ${event.name}.`).slice(0, 160)} />
-      <meta property="og:type" content="website" />
-      <meta property="og:title" content={`Inscreva-se · ${event.name}`} />
-      <meta property="og:description" content={(event.description || `Faça sua inscrição gratuita em ${event.name}.`).slice(0, 160)} />
-      {event.background_image_url && <meta property="og:image" content={event.background_image_url} />}
-      <meta property="og:url" content={typeof window !== "undefined" ? window.location.href : ""} />
-      <meta name="twitter:card" content="summary_large_image" />
-      <meta name="twitter:title" content={`Inscreva-se · ${event.name}`} />
-      <meta name="twitter:description" content={(event.description || `Faça sua inscrição gratuita em ${event.name}.`).slice(0, 160)} />
-      {event.background_image_url && <meta name="twitter:image" content={event.background_image_url} />}
-      <link rel="canonical" href={typeof window !== "undefined" ? window.location.origin + window.location.pathname : ""} />
-    </Helmet>
-  ) : null;
+  useEffect(() => {
+    if (!event) return;
+    const title = `Inscreva-se · ${event.name}`;
+    const description = (event.description || `Faça sua inscrição gratuita em ${event.name}.`).slice(0, 160);
+    const image = event.background_image_url || "";
+    const url = typeof window !== "undefined" ? window.location.href : "";
+    const canonical = typeof window !== "undefined" ? window.location.origin + window.location.pathname : "";
+
+    document.title = title;
+
+    const setMeta = (selector: string, attr: "name" | "property", key: string, content: string) => {
+      if (!content) return;
+      let el = document.head.querySelector<HTMLMetaElement>(selector);
+      if (!el) {
+        el = document.createElement("meta");
+        el.setAttribute(attr, key);
+        document.head.appendChild(el);
+      }
+      el.setAttribute("content", content);
+    };
+
+    setMeta('meta[name="description"]', "name", "description", description);
+    setMeta('meta[property="og:type"]', "property", "og:type", "website");
+    setMeta('meta[property="og:title"]', "property", "og:title", title);
+    setMeta('meta[property="og:description"]', "property", "og:description", description);
+    setMeta('meta[property="og:url"]', "property", "og:url", url);
+    if (image) setMeta('meta[property="og:image"]', "property", "og:image", image);
+    setMeta('meta[name="twitter:card"]', "name", "twitter:card", "summary_large_image");
+    setMeta('meta[name="twitter:title"]', "name", "twitter:title", title);
+    setMeta('meta[name="twitter:description"]', "name", "twitter:description", description);
+    if (image) setMeta('meta[name="twitter:image"]', "name", "twitter:image", image);
+
+    let link = document.head.querySelector<HTMLLinkElement>('link[rel="canonical"]');
+    if (!link) {
+      link = document.createElement("link");
+      link.setAttribute("rel", "canonical");
+      document.head.appendChild(link);
+    }
+    link.setAttribute("href", canonical);
+  }, [event]);
+
+  const seoHead = null;
 
   if (eventLoading || fieldsLoading) {
     return (
