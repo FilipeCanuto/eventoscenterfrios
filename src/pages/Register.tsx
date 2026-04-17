@@ -17,33 +17,100 @@ import confetti from "canvas-confetti";
 type FormField = Tables<"form_fields">;
 
 // ─── Helper: format event date/time with timezone ───
-function formatEventDateTime(event: Event) {
+type EventDateTimeParts = {
+  dateRange: string;
+  durationLabel?: string;
+  timeRange?: string;
+  tzLabel?: string;
+};
+
+function formatTimeBR(date: Date, tz: string) {
+  const t = date.toLocaleTimeString("pt-BR", { hour: "numeric", minute: "2-digit", timeZone: tz, hour12: false });
+  // "14:00" -> "14h", "14:30" -> "14h30"
+  const [h, m] = t.split(":");
+  return m === "00" ? `${parseInt(h, 10)}h` : `${parseInt(h, 10)}h${m}`;
+}
+
+function getPartsInTz(date: Date, tz: string) {
+  const fmt = new Intl.DateTimeFormat("pt-BR", {
+    timeZone: tz,
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+    weekday: "short",
+  });
+  const parts = fmt.formatToParts(date);
+  const get = (t: string) => parts.find(p => p.type === t)?.value || "";
+  return {
+    day: get("day"),
+    month: get("month"),
+    year: get("year"),
+    weekday: get("weekday").replace(".", ""),
+  };
+}
+
+function formatEventDateTimeParts(event: Event): EventDateTimeParts | null {
   const tz = event.timezone || "America/Sao_Paulo";
-  if (!event.event_date) return "";
+  if (!event.event_date) return null;
 
   const start = new Date(event.event_date);
-  const dateStr = start.toLocaleDateString("pt-BR", { month: "short", day: "numeric", year: "numeric", timeZone: tz });
-  
-  const formatTime = (date: Date) => {
-    const t = date.toLocaleTimeString("pt-BR", { hour: "numeric", minute: "2-digit", timeZone: tz });
-    return t.replace(":00", "h").replace(":", "h");
-  };
-  
-  const timeStr = formatTime(start);
-  const tzAbbr = start.toLocaleTimeString("pt-BR", { timeZone: tz, timeZoneName: "short" }).split(" ").pop() || tz;
+  const sp = getPartsInTz(start, tz);
 
-  if (event.event_end_date) {
-    const end = new Date(event.event_end_date);
-    const endDateStr = end.toLocaleDateString("pt-BR", { month: "short", day: "numeric", year: "numeric", timeZone: tz });
-    const endTimeStr = formatTime(end);
+  const tzAbbr = start.toLocaleTimeString("pt-BR", { timeZone: tz, timeZoneName: "short" }).split(" ").pop() || "";
+  const tzLabel = tz === "America/Sao_Paulo" ? "horário de Brasília" : tzAbbr;
 
-    if (endDateStr === dateStr) {
-      return `${dateStr} · ${timeStr} - ${endTimeStr} ${tzAbbr}`;
-    }
-    return `${dateStr} – ${endDateStr} ·${timeStr} - ${endTimeStr} ${tzAbbr}`;
+  const startTime = formatTimeBR(start, tz);
+
+  if (!event.event_end_date) {
+    return {
+      dateRange: `${sp.day} de ${sp.month} de ${sp.year}`,
+      timeRange: `Às ${startTime}`,
+      tzLabel,
+    };
   }
 
-  return `${dateStr} · ${timeStr} ${tzAbbr}`;
+  const end = new Date(event.event_end_date);
+  const ep = getPartsInTz(end, tz);
+  const endTime = formatTimeBR(end, tz);
+
+  // Build a compact date range
+  let dateRange: string;
+  if (sp.year === ep.year && sp.month === ep.month && sp.day === ep.day) {
+    dateRange = `${sp.day} de ${sp.month} de ${sp.year}`;
+  } else if (sp.year === ep.year && sp.month === ep.month) {
+    dateRange = `${sp.day} – ${ep.day} de ${sp.month} de ${sp.year}`;
+  } else if (sp.year === ep.year) {
+    dateRange = `${sp.day} de ${sp.month} – ${ep.day} de ${ep.month} de ${sp.year}`;
+  } else {
+    dateRange = `${sp.day} de ${sp.month} de ${sp.year} – ${ep.day} de ${ep.month} de ${ep.year}`;
+  }
+
+  // Duration in days (inclusive), based on calendar days in tz
+  const startDayKey = `${sp.year}-${sp.month}-${sp.day}`;
+  const endDayKey = `${ep.year}-${ep.month}-${ep.day}`;
+  let durationLabel: string | undefined;
+  if (startDayKey !== endDayKey) {
+    const msPerDay = 24 * 60 * 60 * 1000;
+    // Use UTC midnights for a stable diff
+    const startMid = new Date(start.toLocaleDateString("en-CA", { timeZone: tz }));
+    const endMid = new Date(end.toLocaleDateString("en-CA", { timeZone: tz }));
+    const days = Math.round((endMid.getTime() - startMid.getTime()) / msPerDay) + 1;
+    durationLabel = `${days} dias · ${sp.weekday} a ${ep.weekday}`;
+  }
+
+  // Time range — if both extremes share the same daily window, show single range
+  const timeRange = startTime === endTime ? `Às ${startTime}` : `Das ${startTime} às ${endTime}`;
+
+  return { dateRange, durationLabel, timeRange, tzLabel };
+}
+
+function formatEventDateTime(event: Event): string {
+  const dt = formatEventDateTimeParts(event);
+  if (!dt) return "";
+  const parts = [dt.dateRange];
+  if (dt.timeRange) parts.push(dt.timeRange);
+  if (dt.tzLabel) parts.push(dt.tzLabel);
+  return parts.join(" · ");
 }
 
 // ─── Extracted stable components ───
@@ -122,7 +189,7 @@ const EventInfo = ({ event, className = "" }: { event: Event; className?: string
   const [expanded, setExpanded] = useState(false);
   const locationIcon = event.location_type === "physical" ? <MapPin className="w-4 h-4" /> : event.location_type === "hybrid" ? <Globe className="w-4 h-4" /> : <Video className="w-4 h-4" />;
   const locationLabel = event.location_type === "physical" ? "Presencial" : event.location_type === "hybrid" ? "Híbrido" : "Virtual";
-  const dateTimeStr = formatEventDateTime(event);
+  const dt = formatEventDateTimeParts(event);
 
   // Truncate to first 2 sentences
   const description = event.description || "";
@@ -132,10 +199,28 @@ const EventInfo = ({ event, className = "" }: { event: Event; className?: string
 
   return (
     <div className={`pt-6 md:pt-0 ${className}`}>
-      {dateTimeStr && (
-        <div className="flex items-center gap-2 text-sm text-muted-foreground mb-3">
-          <CalendarDays className="w-4 h-4 shrink-0" />
-          {dateTimeStr}
+      {dt && (
+        <div className="mb-4 space-y-1.5">
+          <div className="flex items-start gap-2.5">
+            <CalendarDays className="w-4 h-4 mt-1 shrink-0 text-muted-foreground" />
+            <div className="leading-tight">
+              <div className="font-display font-semibold text-base md:text-lg text-foreground">
+                {dt.dateRange}
+              </div>
+              {dt.durationLabel && (
+                <div className="text-xs text-muted-foreground mt-0.5">{dt.durationLabel}</div>
+              )}
+            </div>
+          </div>
+          {dt.timeRange && (
+            <div className="flex items-center gap-2.5 text-sm text-muted-foreground">
+              <Clock className="w-4 h-4 shrink-0" />
+              <span>
+                <span className="text-foreground font-medium">{dt.timeRange}</span>
+                {dt.tzLabel && <span className="text-muted-foreground"> · {dt.tzLabel}</span>}
+              </span>
+            </div>
+          )}
         </div>
       )}
       <h1 className="text-2xl sm:text-4xl md:text-7xl font-display font-bold">{event.name}</h1>
