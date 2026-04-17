@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useParams, useSearchParams } from "react-router-dom";
-import { CalendarDays, MapPin, Video, Globe, Loader2, Zap, PartyPopper, Mail, QrCode, Clock } from "lucide-react";
+import { CalendarDays, MapPin, Video, Globe, Loader2, Zap, PartyPopper, Mail, QrCode, Clock, Sparkles, Users, Gift, MessageCircle, Copy, Check } from "lucide-react";
 import { useEventBySlug, Event } from "@/hooks/useEvents";
 import { useFormFields } from "@/hooks/useFormFields";
 import { useCreateRegistration } from "@/hooks/useRegistrations";
