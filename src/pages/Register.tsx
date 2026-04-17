@@ -1,11 +1,12 @@
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useMemo, useRef } from "react";
+import { Helmet } from "react-helmet-async";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
-import { useParams } from "react-router-dom";
-import { CalendarDays, MapPin, Video, Globe, Loader2, Zap, PartyPopper, Mail, QrCode } from "lucide-react";
+import { useParams, useSearchParams } from "react-router-dom";
+import { CalendarDays, MapPin, Video, Globe, Loader2, Zap, PartyPopper, Mail, QrCode, Clock } from "lucide-react";
 import { useEventBySlug, Event } from "@/hooks/useEvents";
 import { useFormFields } from "@/hooks/useFormFields";
 import { useCreateRegistration } from "@/hooks/useRegistrations";
@@ -175,6 +176,7 @@ const RegistrationForm = ({
   onSubmit,
   isPending,
   brandColor,
+  urgencyText,
   className = "",
 }: {
   formFields: FormField[] | undefined;
@@ -185,9 +187,19 @@ const RegistrationForm = ({
   onSubmit: (e: React.FormEvent) => void;
   isPending: boolean;
   brandColor: string;
+  urgencyText?: string;
   className?: string;
 }) => (
   <form onSubmit={onSubmit} className={`space-y-4 ${className}`}>
+    {urgencyText && (
+      <div
+        className="flex items-center gap-2 rounded-full px-3 py-2 text-xs font-medium"
+        style={{ background: `${brandColor}12`, color: brandColor }}
+      >
+        <Clock className="w-3.5 h-3.5 shrink-0" />
+        <span>{urgencyText}</span>
+      </div>
+    )}
     {formFields?.map((field) => {
       const isPhone = isWhatsAppField(field.label);
       const value = formData[field.label] || "";
@@ -203,6 +215,8 @@ const RegistrationForm = ({
             value={value}
             onChange={e => onFieldChange(field.label, isPhone ? maskBRPhone(e.target.value) : e.target.value)}
             aria-invalid={phoneInvalid || undefined}
+            className="h-12 text-base"
+            style={{ fontSize: "16px" }}
           />
           {phoneInvalid && (
             <p className="text-xs text-destructive">Informe um WhatsApp válido com DDD, ex.: (11) 99999-9999.</p>
@@ -218,11 +232,11 @@ const RegistrationForm = ({
     </div>
     <Button
       type="submit"
-      className="w-full h-11 text-base border-0 text-white"
+      className="w-full h-12 text-base font-semibold border-0 text-white rounded-full shadow-lg"
       style={{ background: `linear-gradient(135deg, ${brandColor}, ${brandColor}CC)` }}
       disabled={isPending}
     >
-      {isPending ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Inscrevendo…</> : "Inscreva-se"}
+      {isPending ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Inscrevendo…</> : "Garantir minha vaga"}
     </Button>
   </form>
 );
@@ -236,18 +250,61 @@ const PoweredBy = () => (
 
 // ─── Main component ───
 
+const UTM_KEYS = ["utm_source", "utm_medium", "utm_campaign", "utm_term", "utm_content"] as const;
+const UTM_STORAGE_KEY = "lead_utms";
+
+function captureUtms(searchParams: URLSearchParams): Record<string, string> {
+  const fromUrl: Record<string, string> = {};
+  UTM_KEYS.forEach(k => {
+    const v = searchParams.get(k);
+    if (v) fromUrl[k] = v;
+  });
+  if (Object.keys(fromUrl).length > 0) {
+    try { sessionStorage.setItem(UTM_STORAGE_KEY, JSON.stringify(fromUrl)); } catch {}
+    return fromUrl;
+  }
+  try {
+    const stored = sessionStorage.getItem(UTM_STORAGE_KEY);
+    if (stored) return JSON.parse(stored);
+  } catch {}
+  return {};
+}
+
 const Register = () => {
   const { slug } = useParams();
+  const [searchParams] = useSearchParams();
   const { data: event, isLoading: eventLoading } = useEventBySlug(slug);
   const { data: formFields, isLoading: fieldsLoading } = useFormFields(event?.id);
   const createReg = useCreateRegistration();
   const [formData, setFormData] = useState<Record<string, string>>({});
   const [consent, setConsent] = useState(false);
   const [submitted, setSubmitted] = useState(false);
+  const utmsRef = useRef<Record<string, string>>({});
+
+  useEffect(() => {
+    utmsRef.current = captureUtms(searchParams);
+  }, [searchParams]);
 
   const handleFieldChange = useCallback((label: string, value: string) => {
     setFormData(prev => ({ ...prev, [label]: value }));
   }, []);
+
+  const seoHead = event ? (
+    <Helmet>
+      <title>{`Inscreva-se · ${event.name}`}</title>
+      <meta name="description" content={(event.description || `Faça sua inscrição gratuita em ${event.name}.`).slice(0, 160)} />
+      <meta property="og:type" content="website" />
+      <meta property="og:title" content={`Inscreva-se · ${event.name}`} />
+      <meta property="og:description" content={(event.description || `Faça sua inscrição gratuita em ${event.name}.`).slice(0, 160)} />
+      {event.background_image_url && <meta property="og:image" content={event.background_image_url} />}
+      <meta property="og:url" content={typeof window !== "undefined" ? window.location.href : ""} />
+      <meta name="twitter:card" content="summary_large_image" />
+      <meta name="twitter:title" content={`Inscreva-se · ${event.name}`} />
+      <meta name="twitter:description" content={(event.description || `Faça sua inscrição gratuita em ${event.name}.`).slice(0, 160)} />
+      {event.background_image_url && <meta name="twitter:image" content={event.background_image_url} />}
+      <link rel="canonical" href={typeof window !== "undefined" ? window.location.origin + window.location.pathname : ""} />
+    </Helmet>
+  ) : null;
 
   if (eventLoading || fieldsLoading) {
     return (
@@ -287,7 +344,15 @@ const Register = () => {
       return;
     }
     try {
-      await createReg.mutateAsync({ event_id: event.id, data: formData });
+      const utms = utmsRef.current || {};
+      const payload: Record<string, string> = { ...formData };
+      Object.entries(utms).forEach(([k, v]) => { payload[`__${k}`] = v; });
+      await createReg.mutateAsync({ event_id: event.id, data: payload });
+      // Analytics-ready event (Meta Pixel / GA4 / GTM can hook into this)
+      try {
+        (window as any).dataLayer = (window as any).dataLayer || [];
+        (window as any).dataLayer.push({ event: "lead_registered", event_name: event.name, event_id: event.id, ...utms });
+      } catch {}
       setSubmitted(true);
     } catch (err: any) {
       toast.error(err.message || "Falha na inscrição");
@@ -298,6 +363,7 @@ const Register = () => {
   const template = event.template || "split";
   const flyerUrl = event.background_image_url;
   const isDark = (event as any).color_mode === "dark";
+  const urgencyText = "Inscrição gratuita · leva menos de 1 minuto";
 
   const formProps = {
     formFields,
@@ -308,10 +374,12 @@ const Register = () => {
     onSubmit: handleSubmit,
     isPending: createReg.isPending,
     brandColor,
+    urgencyText,
   };
 
   const wrapDark = (content: React.ReactNode) => (
     <div className={isDark ? "dark" : ""}>
+      {seoHead}
       {content}
     </div>
   );
