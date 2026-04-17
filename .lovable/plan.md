@@ -1,99 +1,76 @@
 
 
-# Captura completa de leads + e-mail de confirmação com QR Code + animação comemorativa
+## Objetivo
 
-## Visão geral
+Garantir que o link `/register/circuito-experience-centerfrios-skymsen-rq0bmz` seja a porta de entrada direta do lead, sem login, sem etapas intermediárias, e sem qualquer barreira que atrapalhe a conversão vinda de anúncios e landing pages externas.
 
-Quatro mudanças coordenadas:
-1. **Formulário de inscrição** — incluir WhatsApp como campo obrigatório (junto a Nome e E-mail).
-2. **E-mail de confirmação** — enviar automaticamente após inscrição, com dados do evento + QR Code do "cartão de presença" + aviso sobre sorteio.
-3. **Validação de QR Code na entrada** — o QR aponta para uma URL pública que valida a inscrição.
-4. **Animação comemorativa** — confetes + mensagem empolgante na tela de sucesso.
+## Diagnóstico
 
----
+Verifiquei `src/App.tsx`: a rota `/register/:slug` já é **pública** (não está dentro de `<ProtectedRoute>`). Tecnicamente, qualquer pessoa com o link consegue acessar e se inscrever sem login — o backend usa a função pública `register_for_event`.
 
-## 1. Captura de WhatsApp obrigatório
+Porém, revisando o componente `src/pages/Register.tsx` e o fluxo atual, identifiquei pontos de fricção que podem afastar o lead vindo de anúncio:
 
-### 1a. Novos eventos (código)
-Em `src/pages/dashboard/CreateEvent.tsx`, atualizar `defaultFields`:
-```ts
-const defaultFields = [
-  { label: "Nome Completo", field_type: "text", required: true, position: 0 },
-  { label: "Endereço de E-mail", field_type: "email", required: true, position: 1 },
-  { label: "WhatsApp", field_type: "tel", required: true, position: 2 },
-  { label: "Empresa", field_type: "text", required: false, position: 3 },
-  { label: "Cargo", field_type: "text", required: false, position: 4 },
-];
-```
+1. **Possível redirecionamento ou tela de espera** — preciso confirmar se há algum `useEffect` que checa autenticação ou faz redirect.
+2. **Header/navbar com links** que podem tirar o lead da página (voltar ao site, ver outros eventos, fazer login).
+3. **Carregamento lento ou flash de conteúdo** — se o lead vê um spinner longo ou conteúdo "piscando", pode desistir.
+4. **CTA do formulário** pode não estar destacado o suficiente como primeira ação visual.
+5. **Campos opcionais excessivos** podem espantar — manter só Nome, E-mail e WhatsApp em destaque (já está, conforme última edição).
+6. **Open Graph / metatags** — quando o link é compartilhado em anúncios (Meta Ads, WhatsApp), precisa exibir prévia rica (imagem do evento, título, descrição) para aumentar CTR.
+7. **Landing externa** — facilitar para que landing pages externas (ex.: do anunciante) consigam embedar ou redirecionar diretamente para essa URL.
 
-### 1b. Eventos existentes (dados)
-Inserir o campo "WhatsApp" como obrigatório em todos os eventos atuais que ainda não tenham, via tool de insert (sem migração).
+## Plano de Ação
 
-### 1c. Validação no formulário público
-`src/pages/Register.tsx` — adicionar máscara/validação leve para WhatsApp brasileiro (ex.: `(11) 99999-9999`) e mensagem de erro clara.
+### 1. Confirmar acesso 100% público (sem login)
+Inspecionar `src/pages/Register.tsx` e remover qualquer:
+- Verificação de sessão (`useAuth`, `user`, redirect para `/auth`).
+- Botões de login/cadastro no header da própria página.
+- Links de navegação que tirem o lead do contexto de inscrição.
 
----
+### 2. Layout focado em conversão (landing-style)
+- Esconder qualquer navbar global na rota `/register/:slug`.
+- Manter apenas: logo da empresa organizadora (sem link para outras páginas) + flyer + título + formulário + CTA.
+- Botão de inscrição grande, em destaque (`h-12`, `rounded-full`, primary color), texto claro: "Garantir minha vaga".
+- Acima do formulário, microcopy de urgência sutil: data + local + "Inscrição gratuita em menos de 1 minuto".
 
-## 2. E-mail de confirmação com QR Code
+### 3. Carregamento otimizado
+- Skeleton mínimo (sem flashes).
+- Carregar dados do evento e campos do formulário em paralelo.
+- Pré-renderizar título/descrição assim que disponível (sem esperar tudo).
 
-### 2a. Pré-requisito: domínio de e-mail
-O projeto **ainda não tem domínio de e-mail configurado**. O usuário precisa configurar um domínio remetente antes de enviarmos e-mails. Após o domínio ser configurado, prossigo automaticamente com:
-- Configuração da infraestrutura de e-mail (filas, log, supressão).
-- Criação do template transacional `event-registration-confirmation`.
-- Criação da Edge Function `send-transactional-email`.
+### 4. SEO + Open Graph dinâmico
+Adicionar `react-helmet-async` (ou tags diretas via `useEffect`) na página de registro para:
+- `<title>` = "Inscreva-se · {nome do evento}"
+- `<meta name="description">` = descrição curta do evento
+- `<meta property="og:title">`, `og:description`, `og:image` (flyer do evento), `og:url`
+- `<meta name="twitter:card" content="summary_large_image">`
 
-### 2b. Template do e-mail (`registration-confirmation.tsx`)
-Conteúdo do e-mail:
-- Saudação com o nome do inscrito.
-- Confirmação: "Sua inscrição em **{nome do evento}** foi confirmada!"
-- Bloco com **detalhes do evento**: data/hora (com timezone), local (físico/virtual + link), descrição curta.
-- **Cartão de presença com QR Code** (imagem PNG embutida via data URL, gerada no servidor com `qrcode` em Deno, contendo a URL `https://<app>/check-in/<registration_id>`).
-- Aviso destacado: "🎁 **Apresente este QR Code na entrada para validar sua participação no sorteio de brindes.**"
-- Rodapé com identidade da empresa organizadora (nome do organizador puxado do perfil).
+Isso garante que o link compartilhado em anúncios e WhatsApp mostre prévia rica.
 
-Estilo: branco (#ffffff) de fundo, cores da marca (rose-red HSL 340 75% 58%) para CTA e acentos, tipografia segura para e-mail.
+### 5. UTM tracking pronto para anúncios
+Capturar parâmetros `utm_source`, `utm_medium`, `utm_campaign` da URL e:
+- Salvar como metadata na inscrição (campo `data` ou novo campo `metadata` no insert).
+- Persistir em `sessionStorage` para sobreviver a refresh.
 
-### 2c. Disparo do e-mail
-Modificar `src/hooks/useRegistrations.ts` (`useCreateRegistration`): após `register_for_event` retornar com sucesso, invocar `supabase.functions.invoke('send-transactional-email', { body: { templateName: 'registration-confirmation', recipientEmail, idempotencyKey: 'reg-confirm-${registrationId}', templateData: { name, eventName, eventDate, location, registrationId, organizerName } } })`.
+Isso permite à equipe medir qual anúncio gerou cada inscrição.
 
-A Edge Function busca o evento + perfil do organizador, gera o QR Code como data URL e injeta no template como prop.
+### 6. Pixel/analytics ready (opcional, sem código de terceiros agora)
+Disparar evento custom `lead_registered` no `window.dataLayer` (se existir) ao concluir inscrição — facilita plugar Meta Pixel ou GA4 depois sem tocar no código.
 
-### 2d. Página de validação `/check-in/:registrationId`
-Nova rota pública somente leitura que mostra:
-- Nome do inscrito, evento, data.
-- Status: "✅ Inscrição válida" ou "⚠️ Inscrição cancelada / não encontrada".
-- (Futuro: organizador autenticado pode marcar como "presente".)
+### 7. Mobile-first reforçado
+- Inputs `h-12`, fonte 16px (evita zoom no iOS).
+- Botão sticky no rodapé em mobile (sempre visível ao rolar).
+- Flyer com altura limitada em mobile para não empurrar o formulário para fora da dobra.
 
----
+## Arquivos Afetados
 
-## 3. Animação comemorativa de "Obrigado"
+- **`src/pages/Register.tsx`** — remover qualquer auth/redirect, esconder navbar, reforçar CTA, adicionar metatags OG, capturar UTMs, sticky CTA mobile.
+- **`index.html`** — fallback de metatags base (caso JS demore).
+- **`src/hooks/useRegistrations.ts`** — incluir UTMs no payload da inscrição.
+- **`package.json`** — adicionar `react-helmet-async` (se ainda não houver).
 
-### 3a. Instalar `canvas-confetti`
-Pacote leve para disparar confetes coloridos.
+## Fora de escopo (mas sugerido como próximo passo)
 
-### 3b. Atualizar `SuccessCard` em `src/pages/Register.tsx`
-- Disparar confete contínuo (3 bursts) ao montar o componente.
-- Substituir o card discreto por uma tela mais empolgante:
-  - Ícone grande animado (CheckCircle com bounce).
-  - Headline: "🎉 Obrigado, {primeiro nome}!"
-  - Subtexto: "Sua presença em **{evento}** está garantida."
-  - Mensagem secundária: "Enviamos seu **cartão de presença com QR Code** para o seu e-mail. Apresente-o na entrada para concorrer aos brindes!"
-  - Botões: "Adicionar ao calendário" (gera link .ics) + "Compartilhar".
-- Animação framer-motion: scale-in + fade + leve rotação no ícone.
+- Configurar Meta Pixel / Google Tag Manager (precisa dos IDs do anunciante).
+- Criar variantes A/B do CTA.
+- Página de "obrigado" com link de compartilhamento já preenchido para o lead convidar amigos.
 
----
-
-## Arquivos afetados
-
-- **Editar**: `src/pages/dashboard/CreateEvent.tsx`, `src/pages/Register.tsx`, `src/hooks/useRegistrations.ts`, `src/App.tsx` (nova rota).
-- **Criar**: `src/pages/CheckIn.tsx`, `supabase/functions/_shared/transactional-email-templates/registration-confirmation.tsx`, edge functions de e-mail.
-- **Dados**: insert de campo "WhatsApp" obrigatório em eventos existentes.
-- **Pacote**: adicionar `canvas-confetti` + `@types/canvas-confetti`.
-
-## Pré-requisito bloqueante
-
-Antes de eu prosseguir com a parte de e-mail, é necessário configurar um **domínio de envio de e-mails** (ex.: `notify.centerfrios.com.br`). É um passo único que melhora a entregabilidade e mostra os e-mails como vindos da sua marca. Vou seguir com as outras três mudanças (WhatsApp, QR Code na página de check-in, animação comemorativa) em paralelo, e a parte de e-mail é ativada assim que o domínio estiver pronto.
-
-<lov-actions>
-<lov-open-email-setup>Configurar domínio de e-mail</lov-open-email-setup>
-</lov-actions>
