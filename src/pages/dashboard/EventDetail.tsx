@@ -15,6 +15,7 @@ import EventDetailHeader from "@/components/event-detail/EventDetailHeader";
 import EventQuickInfo from "@/components/event-detail/EventQuickInfo";
 import EventAttendeesTable from "@/components/event-detail/EventAttendeesTable";
 import EventQRCode from "@/components/event-detail/EventQRCode";
+import RegistrationLinkBlock from "@/components/event-detail/RegistrationLinkBlock";
 
 const EventDetail = () => {
   const { id } = useParams();
@@ -70,6 +71,7 @@ const EventDetail = () => {
     <div className="space-y-6">
       <EventDetailHeader event={event} onStatusChange={handleStatusChange} onDelete={handleDelete} />
       <EventQuickInfo event={event} onUpdate={handleUpdate} />
+      <RegistrationLinkBlock slug={event.slug} eventName={event.name} />
 
       <Tabs defaultValue="branding">
         <TabsList className="bg-muted rounded-full p-1 w-full sm:w-auto">
