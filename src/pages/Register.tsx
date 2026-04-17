@@ -1,11 +1,11 @@
-import { useState, useCallback, useEffect, useMemo, useRef } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useParams, useSearchParams } from "react-router-dom";
-import { CalendarDays, MapPin, Video, Globe, Loader2, Zap, PartyPopper, Mail, QrCode, Clock, Sparkles, Users, Gift, MessageCircle, Copy, Check } from "lucide-react";
+import { CalendarDays, MapPin, Video, Globe, Loader2, Zap, PartyPopper, Mail, QrCode, Clock, MessageCircle, Copy, Check } from "lucide-react";
 import { useEventBySlug, Event } from "@/hooks/useEvents";
 import { useFormFields } from "@/hooks/useFormFields";
 import { useCreateRegistration } from "@/hooks/useRegistrations";
@@ -479,9 +479,7 @@ const Register = () => {
     }
     try {
       const utms = utmsRef.current || {};
-      const payload: Record<string, string> = { ...formData };
-      Object.entries(utms).forEach(([k, v]) => { payload[`__${k}`] = v; });
-      await createReg.mutateAsync({ event_id: event.id, data: payload });
+      await createReg.mutateAsync({ event_id: event.id, data: formData, tracking: utms });
       // Analytics-ready event (Meta Pixel / GA4 / GTM can hook into this)
       try {
         (window as any).dataLayer = (window as any).dataLayer || [];
@@ -519,9 +517,10 @@ const Register = () => {
   );
 
   if (submitted) {
+    const shareUrl = typeof window !== "undefined" ? `${window.location.origin}/register/${event.slug}` : "";
     return wrapDark(
       <div className="min-h-screen flex items-center justify-center px-4 py-12 bg-background text-foreground" style={{ background: isDark ? undefined : `linear-gradient(135deg, ${brandColor}15, ${brandColor}05)` }}>
-        <SuccessCard brandColor={brandColor} eventName={event.name} name={formData["Nome Completo"] || formData["Nome"] || formData["Name"] || ""} />
+        <SuccessCard brandColor={brandColor} eventName={event.name} name={formData["Nome Completo"] || formData["Nome"] || formData["Name"] || ""} shareUrl={shareUrl} />
       </div>
     );
   }
