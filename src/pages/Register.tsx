@@ -491,15 +491,34 @@ const Register = () => {
       // pass an email from the client (prevents open-relay abuse).
       try {
         if (registrationId) {
-          supabase.functions.invoke("send-registration-confirmation", {
-            body: {
-              registrationId,
-              origin: typeof window !== "undefined" ? window.location.origin : null,
-            },
-          }).catch((err) => console.warn("Confirmation email failed:", err));
+          console.log("[confirmation-email] invoking", { registrationId });
+          supabase.functions
+            .invoke("send-registration-confirmation", {
+              body: {
+                registrationId,
+                origin: typeof window !== "undefined" ? window.location.origin : null,
+              },
+            })
+            .then(({ data, error }) => {
+              if (error) {
+                console.error("[confirmation-email] invoke error", {
+                  message: error.message,
+                  status: (error as any).status,
+                  context: (error as any).context,
+                  data,
+                });
+              } else {
+                console.log("[confirmation-email] invoke ok", data);
+              }
+            })
+            .catch((err) =>
+              console.error("[confirmation-email] invoke threw", err),
+            );
+        } else {
+          console.warn("[confirmation-email] no registrationId returned, skipping");
         }
       } catch (err) {
-        console.warn("Confirmation email dispatch error:", err);
+        console.error("[confirmation-email] dispatch exception", err);
       }
       setSubmitted(true);
     } catch (err: any) {
