@@ -132,8 +132,9 @@ function isValidBRPhone(value: string) {
   return digits.length === 10 || digits.length === 11;
 }
 
-const SuccessCard = ({ brandColor, eventName, name }: { brandColor: string; eventName: string; name: string }) => {
+const SuccessCard = ({ brandColor, eventName, name, shareUrl }: { brandColor: string; eventName: string; name: string; shareUrl: string }) => {
   const firstName = (name || "").trim().split(/\s+/)[0] || "";
+  const [copied, setCopied] = useState(false);
 
   useEffect(() => {
     const colors = [brandColor, "#FFD166", "#06D6A0", "#118AB2", "#EF476F"];
@@ -144,6 +145,18 @@ const SuccessCard = ({ brandColor, eventName, name }: { brandColor: string; even
     fire(250, { particleCount: 80, angle: 60, spread: 60, origin: { x: 0, y: 0.7 } });
     fire(500, { particleCount: 80, angle: 120, spread: 60, origin: { x: 1, y: 0.7 } });
   }, [brandColor]);
+
+  const shareText = `Acabei de garantir minha vaga em ${eventName}! Garanta a sua também:`;
+  const whatsappUrl = `https://wa.me/?text=${encodeURIComponent(`${shareText} ${shareUrl}`)}`;
+
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(shareUrl);
+      setCopied(true);
+      toast.success("Link copiado!");
+      setTimeout(() => setCopied(false), 2000);
+    } catch {}
+  };
 
   return (
     <motion.div key="success" initial={{ opacity: 0, scale: 0.92 }} animate={{ opacity: 1, scale: 1 }} transition={{ type: "spring", stiffness: 120 }} className="w-full max-w-lg mx-auto">
@@ -177,6 +190,20 @@ const SuccessCard = ({ brandColor, eventName, name }: { brandColor: string; even
               <p className="text-sm">
                 Apresente o QR Code na entrada para validar sua presença e <strong>concorrer aos brindes</strong> 🎁.
               </p>
+            </div>
+          </motion.div>
+          <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.65 }} className="mt-6 space-y-3">
+            <p className="text-xs text-muted-foreground">Convide alguém para vir com você:</p>
+            <div className="flex gap-2">
+              <Button asChild variant="outline" className="flex-1 rounded-full h-11">
+                <a href={whatsappUrl} target="_blank" rel="noopener noreferrer">
+                  <MessageCircle className="w-4 h-4 mr-2" /> WhatsApp
+                </a>
+              </Button>
+              <Button onClick={handleCopy} variant="outline" className="flex-1 rounded-full h-11">
+                {copied ? <Check className="w-4 h-4 mr-2 text-success" /> : <Copy className="w-4 h-4 mr-2" />}
+                {copied ? "Copiado" : "Copiar link"}
+              </Button>
             </div>
           </motion.div>
         </CardContent>
