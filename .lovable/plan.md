@@ -1,62 +1,61 @@
+## Diagnóstico (confirmado)
 
+Testei o endpoint diretamente:
 
-## Objetivo
+```
+POST https://ahwecyjzzczcwunptxae.supabase.co/functions/v1/send-registration-confirmation
+→ HTTP 404
+```
 
-Enviar e-mail de confirmação automático ao lead logo após inscrição em `/register/:slug`, contendo: confirmação, dados do evento (nome, data/hora, local), nome do inscrito e selo da marca. Provedor: **Resend** (escolha explícita do usuário).
+**A edge function nunca foi deployada.** Por isso:
 
-## Diagnóstico
+- Não há **nenhum log** (`supabase--edge_function_logs` retorna vazio).
+- Nenhum e-mail foi enviado em nenhuma das tentativas.
+- O usuário não vê erro porque a chamada no client é fire-and-forget (`.catch(console.warn)`), e logs do client foram limpos.
 
-- Resend é um **connector** disponível (`connector_id: resend`, usa connector gateway).
-- Já existe edge function `enhance-description` no projeto, então a infra de functions está ativa.
-- A inscrição passa pela RPC `register_for_event` (chamada em `useRegistrations.ts`). Após sucesso, temos `lead_email`, `lead_name` no payload do form e o objeto `event` carregado em `Register.tsx` (com `name`, `event_date`, `event_end_date`, `timezone`, `location_type`, `location_value`, `slug`, `primary_color`, `logo_url`).
-- O usuário escolheu Resend explicitamente, então **não usar Lovable Emails**.
+A causa raiz é que o arquivo `supabase/functions/send-registration-confirmation/index.ts` foi criado, mas o deploy não aconteceu (ou falhou silenciosamente). Além disso, faltam dois reforços de robustez:
 
-## Plano
+1. `**supabase/config.toml**` não declara a função com `verify_jwt = false`. A página `/register/:slug` é pública (lead não-autenticado), então sem isso o gateway pode rejeitar a chamada antes de chegar ao código da função.
+2. **Observabilidade zero no client**: o `.catch(console.warn)` esconde 401/403/404. Vou trocar por um log mais visível (sem incomodar o lead) para diagnóstico futuro.
 
-### 1. Conectar o Resend
-- Acionar `standard_connectors--connect` com `connector_id: resend` para que o usuário selecione/crie a conexão.
-- Após conectar, `RESEND_API_KEY` e `LOVABLE_API_KEY` ficam disponíveis como secrets em edge functions.
-- O usuário precisa ter um **domínio verificado no Resend** (ex.: `centerfrios.com.br` → `eventos@centerfrios.com.br`). Para teste imediato, usaremos `onboarding@resend.dev` como remetente (limitação: só envia para o e-mail dono da conta Resend). Vou informar isso claramente.
+## Plano de correção
 
-### 2. Edge function `send-registration-confirmation`
-Criar `supabase/functions/send-registration-confirmation/index.ts`:
-- **Input** (POST JSON): `{ registrationId, eventId, recipientEmail, recipientName, eventName, eventDate, eventEndDate, timezone, locationType, locationValue, eventSlug, primaryColor, logoUrl }`.
-- **Validação**: Zod no body. Sem auth (chamada do client público após inscrição) — protegida por:
-  - rate-limit em memória simples (ip + email, 3/min) para mitigar abuso;
-  - validação de que `registrationId` existe na tabela `registrations` (consulta com service role).
-- **CORS**: headers padrão do projeto.
-- **Envio via gateway**:
+### 1. Garantir deploy da edge function
+
+- Reescrever (idempotente) `supabase/functions/send-registration-confirmation/index.ts` para forçar o redeploy.
+- Adicionar bloco em `supabase/config.toml`:
+  ```toml
+  [functions.send-registration-confirmation]
+  verify_jwt = false
   ```
-  POST https://connector-gateway.lovable.dev/resend/emails
-  Headers: Authorization: Bearer ${LOVABLE_API_KEY}, X-Connection-Api-Key: ${RESEND_API_KEY}
-  Body: { from, to, subject, html }
-  ```
-- **From inicial**: `meuevento <onboarding@resend.dev>` (modo sandbox). Comentário no código indica como trocar para domínio verificado.
-- **HTML**: template inline responsivo (max-width 560px), header com `primary_color` do evento e logo (se houver), saudação personalizada, card com data/hora formatadas em pt-BR usando `Intl.DateTimeFormat` com `timezone`, local (online → link, presencial → endereço), botão "Ver página do evento" apontando para `/register/{slug}`, footer minimalista "powered by meuevento". Sem unsubscribe (é transacional 1:1, expectativa do destinatário).
+  Isso permite invocação pelo client público sem sessão (o lead não está logado).
 
-### 3. Disparo do e-mail no client
-Em `src/pages/Register.tsx`, no `onSuccess` do `createRegistration.mutateAsync`:
-- Chamar `supabase.functions.invoke('send-registration-confirmation', { body: {...} })` em **fire-and-forget** (não bloqueia a UI de sucesso).
-- Logar erro silencioso no console (não mostrar erro ao lead — o cadastro foi feito).
-- Idempotência: passar `registrationId` retornado pela RPC; a function pode (em iteração futura) marcar `registrations.tracking.confirmation_email_sent_at` para evitar duplicidade. Por enquanto, o disparo só acontece uma vez no fluxo do front.
+### 2. Melhorar observabilidade
 
-### 4. Tratamento de erros & observabilidade
-- Logs claros na function (`console.log/error`) com prefixos para fácil filtro.
-- Retorno 200 mesmo se Resend falhar com 4xx do remetente (logamos), para não bloquear retries inúteis. Erros de auth (401/403) retornam 502 para sinalizar problema de config.
+- No `Register.tsx`, trocar `console.warn` por `console.error` com prefixo `[confirmation-email]` e logar `status` + `body` da resposta quando `invoke` retornar erro. Sem `toast` ao lead — a inscrição em si foi bem-sucedida.
+- Acrescentar `console.log` na entrada da edge function ("[send-registration-confirmation] invoked", payload mínimo) para confirmar invocação ao testar.
 
-### 5. Comunicação ao usuário (após implementação)
-- Informar que o sistema está usando `onboarding@resend.dev` (sandbox) e que para produção é necessário verificar `centerfrios.com.br` no Resend e trocar 1 linha no código (`FROM_ADDRESS`).
-- Explicar como testar: fazer uma inscrição com o e-mail dono da conta Resend e conferir a caixa de entrada.
+### 3. Validar pós-deploy
+
+- Após deploy, fazer uma chamada de teste via `curl` ao endpoint com um `registrationId` real e conferir os logs em tempo real.
+- Confirmar que `RESEND_API_KEY` e `LOVABLE_API_KEY` estão ativos como secrets (✅ já confirmados na configuração — Resend está conectado).
+
+### 4. Lembrete de sandbox (não é bug — só comunicação)
+
+A função usa `from: onboarding@resend.dev` (modo sandbox do Resend). **Nesse modo, o Resend só entrega para o e-mail dono da conta Resend (Filipe).** E-mails para qualquer outro destinatário são aceitos pela API mas **silenciosamente descartados/bounced** pelo Resend.
+
+- Para teste imediato: usar o e-mail do Filipe na inscrição.
+- Para produção real: verificar `centerfrios.com.br` no painel do Resend e trocar `FROM_ADDRESS` para `eventos@centerfrios.com.br`.
 
 ## Arquivos afetados
 
-- **`supabase/functions/send-registration-confirmation/index.ts`** (novo) — edge function com template HTML inline.
-- **`src/pages/Register.tsx`** — adicionar `supabase.functions.invoke(...)` no `onSuccess` da inscrição.
+- `**supabase/functions/send-registration-confirmation/index.ts**` — touch/reescrita idêntica para forçar redeploy + log de entrada.
+- `**supabase/config.toml**` — adicionar bloco `[functions.send-registration-confirmation]` com `verify_jwt = false`.
+- `**src/pages/Register.tsx**` — melhorar log de erro do `invoke` (sem afetar UX do lead).
 
-## Fora de escopo (próximos passos)
+## Fora de escopo
 
-- QR Code do "cartão de presença" no e-mail (depende de gerar QR server-side ou usar serviço externo).
-- Lembrete D-1 / D-7 do evento (precisa de cron + tabela de jobs).
-- Verificação de domínio próprio no Resend (ação manual do usuário no painel Resend).
-- Persistir `confirmation_email_sent_at` em `registrations.tracking` para idempotência server-side.
-
+- Verificação do domínio `centerfrios.com.br` no Resend (ação manual no painel Resend; depende do DNS do cliente).
+- Persistir status detalhado de envio em `email_send_log` (a função já marca `tracking.confirmation_email_sent_at` para idempotência — suficiente por ora).  
+  
+(Observação: nosso domínio não é "centerfrios.com.br" é "centerfrios.com")
