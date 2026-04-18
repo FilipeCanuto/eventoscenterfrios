@@ -37,6 +37,9 @@ function fmtDate(iso?: string | null, tz?: string | null) {
   } catch { return null; }
 }
 
+const REPLY_TO_ADDRESS = "contato@eventos.centerfrios.com";
+const UNSUBSCRIBE_MAILTO = "contato@eventos.centerfrios.com";
+
 interface EmailContext {
   recipientEmail: string;
   recipientName: string;
@@ -49,6 +52,40 @@ interface EmailContext {
   eventSlug: string;
   primaryColor: string | null;
   logoUrl: string | null;
+}
+
+function buildPlainText(p: EmailContext, origin: string) {
+  const start = fmtDate(p.eventDate, p.timezone);
+  const end = fmtDate(p.eventEndDate, p.timezone);
+  let when = "Data a confirmar";
+  if (start && end && p.eventDate?.slice(0, 10) !== p.eventEndDate?.slice(0, 10)) {
+    when = `${start.date} a ${end.date} — ${start.time} às ${end.time}`;
+  } else if (start && end) {
+    when = `${start.date} — ${start.time} às ${end.time}`;
+  } else if (start) {
+    when = `${start.date} — ${start.time}`;
+  }
+  const isOnline = (p.locationType || "").toLowerCase() === "online";
+  const where = p.locationValue
+    ? `${isOnline ? "Link de acesso" : "Local"}: ${p.locationValue}`
+    : "Local: a definir";
+  const greet = p.recipientName?.trim() ? `Olá, ${p.recipientName.trim()}!` : "Olá!";
+  const url = `${origin}/register/${encodeURIComponent(p.eventSlug)}`;
+  return [
+    greet,
+    "",
+    `Sua inscrição em "${p.eventName}" foi confirmada.`,
+    "",
+    `Quando: ${when}`,
+    where,
+    "",
+    `Página do evento: ${url}`,
+    "",
+    "Guarde este e-mail como comprovante. Enviaremos lembretes próximos da data.",
+    "",
+    "Equipe Eventos Centerfrios",
+    `Para parar de receber estes avisos, responda este e-mail com "sair".`,
+  ].join("\n");
 }
 
 function buildHtml(p: EmailContext, origin: string) {
@@ -85,7 +122,7 @@ function buildHtml(p: EmailContext, origin: string) {
   return `<!doctype html>
 <html lang="pt-BR"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/><title>Inscrição confirmada</title></head>
 <body style="margin:0;padding:0;background:#f6f6f7;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#111">
-  <div style="display:none;max-height:0;overflow:hidden">Sua inscrição em ${escapeHtml(p.eventName)} foi confirmada.</div>
+  <div style="display:none;max-height:0;overflow:hidden;opacity:0;color:transparent">Tudo certo! Guarde este e-mail como comprovante da sua inscrição.</div>
   <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f6f6f7;padding:32px 16px">
     <tr><td align="center">
       <table role="presentation" width="560" cellpadding="0" cellspacing="0" style="max-width:560px;width:100%;background:#ffffff;border-radius:20px;overflow:hidden;box-shadow:0 1px 2px rgba(0,0,0,0.04)">
@@ -226,7 +263,8 @@ serve(async (req) => {
       "https://eventoscenterfrios.lovable.app";
 
     const html = buildHtml(ctx, origin);
-    const subject = `✅ Inscrição confirmada — ${ctx.eventName}`;
+    const text = buildPlainText(ctx, origin);
+    const subject = `Inscrição confirmada — ${ctx.eventName}`;
 
     const resp = await fetch(`${GATEWAY_URL}/emails`, {
       method: "POST",
@@ -238,8 +276,18 @@ serve(async (req) => {
       body: JSON.stringify({
         from: FROM_ADDRESS,
         to: [recipientEmail],
+        reply_to: REPLY_TO_ADDRESS,
         subject,
         html,
+        text,
+        headers: {
+          "List-Unsubscribe": `<mailto:${UNSUBSCRIBE_MAILTO}?subject=unsubscribe>`,
+          "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
+        },
+        tags: [
+          { name: "type", value: "registration_confirmation" },
+          { name: "event_slug", value: (ctx.eventSlug || "unknown").slice(0, 50) },
+        ],
       }),
     });
 

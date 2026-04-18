@@ -1,0 +1,1 @@
+UPDATE registrations SET tracking = tracking - 'confirmation_email_sent_at' WHERE id = '0efcc291-643f-4907-be78-062c161c9e91';
