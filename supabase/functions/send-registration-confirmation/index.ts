@@ -8,8 +8,7 @@ const corsHeaders = {
 };
 
 const GATEWAY_URL = "https://connector-gateway.lovable.dev/resend";
-// TODO: trocar para "Eventos Centerfrios <eventos@centerfrios.com>" assim que o domínio centerfrios.com for verificado em https://resend.com/domains
-const FROM_ADDRESS = "Eventos Centerfrios <onboarding@resend.dev>";
+const FROM_ADDRESS = "Eventos Centerfrios <eventos@centerfrios.com>";
 
 interface Payload {
   registrationId: string;
