@@ -263,7 +263,8 @@ serve(async (req) => {
       "https://eventoscenterfrios.lovable.app";
 
     const html = buildHtml(ctx, origin);
-    const subject = `✅ Inscrição confirmada — ${ctx.eventName}`;
+    const text = buildPlainText(ctx, origin);
+    const subject = `Inscrição confirmada — ${ctx.eventName}`;
 
     const resp = await fetch(`${GATEWAY_URL}/emails`, {
       method: "POST",
@@ -275,8 +276,18 @@ serve(async (req) => {
       body: JSON.stringify({
         from: FROM_ADDRESS,
         to: [recipientEmail],
+        reply_to: REPLY_TO_ADDRESS,
         subject,
         html,
+        text,
+        headers: {
+          "List-Unsubscribe": `<mailto:${UNSUBSCRIBE_MAILTO}?subject=unsubscribe>`,
+          "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
+        },
+        tags: [
+          { name: "type", value: "registration_confirmation" },
+          { name: "event_slug", value: (ctx.eventSlug || "unknown").slice(0, 50) },
+        ],
       }),
     });
 
