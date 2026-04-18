@@ -122,7 +122,7 @@ function buildHtml(p: EmailContext, origin: string) {
   return `<!doctype html>
 <html lang="pt-BR"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/><title>Inscrição confirmada</title></head>
 <body style="margin:0;padding:0;background:#f6f6f7;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#111">
-  <div style="display:none;max-height:0;overflow:hidden">Sua inscrição em ${escapeHtml(p.eventName)} foi confirmada.</div>
+  <div style="display:none;max-height:0;overflow:hidden;opacity:0;color:transparent">Tudo certo! Guarde este e-mail como comprovante da sua inscrição.</div>
   <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f6f6f7;padding:32px 16px">
     <tr><td align="center">
       <table role="presentation" width="560" cellpadding="0" cellspacing="0" style="max-width:560px;width:100%;background:#ffffff;border-radius:20px;overflow:hidden;box-shadow:0 1px 2px rgba(0,0,0,0.04)">
