@@ -37,6 +37,9 @@ function fmtDate(iso?: string | null, tz?: string | null) {
   } catch { return null; }
 }
 
+const REPLY_TO_ADDRESS = "contato@eventos.centerfrios.com";
+const UNSUBSCRIBE_MAILTO = "contato@eventos.centerfrios.com";
+
 interface EmailContext {
   recipientEmail: string;
   recipientName: string;
@@ -49,6 +52,40 @@ interface EmailContext {
   eventSlug: string;
   primaryColor: string | null;
   logoUrl: string | null;
+}
+
+function buildPlainText(p: EmailContext, origin: string) {
+  const start = fmtDate(p.eventDate, p.timezone);
+  const end = fmtDate(p.eventEndDate, p.timezone);
+  let when = "Data a confirmar";
+  if (start && end && p.eventDate?.slice(0, 10) !== p.eventEndDate?.slice(0, 10)) {
+    when = `${start.date} a ${end.date} — ${start.time} às ${end.time}`;
+  } else if (start && end) {
+    when = `${start.date} — ${start.time} às ${end.time}`;
+  } else if (start) {
+    when = `${start.date} — ${start.time}`;
+  }
+  const isOnline = (p.locationType || "").toLowerCase() === "online";
+  const where = p.locationValue
+    ? `${isOnline ? "Link de acesso" : "Local"}: ${p.locationValue}`
+    : "Local: a definir";
+  const greet = p.recipientName?.trim() ? `Olá, ${p.recipientName.trim()}!` : "Olá!";
+  const url = `${origin}/register/${encodeURIComponent(p.eventSlug)}`;
+  return [
+    greet,
+    "",
+    `Sua inscrição em "${p.eventName}" foi confirmada.`,
+    "",
+    `Quando: ${when}`,
+    where,
+    "",
+    `Página do evento: ${url}`,
+    "",
+    "Guarde este e-mail como comprovante. Enviaremos lembretes próximos da data.",
+    "",
+    "Equipe Eventos Centerfrios",
+    `Para parar de receber estes avisos, responda este e-mail com "sair".`,
+  ].join("\n");
 }
 
 function buildHtml(p: EmailContext, origin: string) {
