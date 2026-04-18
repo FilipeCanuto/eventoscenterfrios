@@ -1,61 +1,44 @@
-## Diagnóstico (confirmado)
+## Diagnóstico definitivo
 
-Testei o endpoint diretamente:
+A função `register_for_event` extrai email/nome buscando chaves em inglês (`Email Address`, `Full Name`), mas o formulário envia em português (`Endereço de E-mail`, `Nome Completo`). Resultado: `lead_email` salvo como `NULL` em **todas as 7 inscrições recentes**. A edge function `send-registration-confirmation` então rejeita com `"No valid email on registration"` e nenhum e-mail é enviado. Confirmado via consulta direta — o email está em `data->>'Endereço de E-mail'` mas não em `lead_email`.
 
+## Correção
+
+### 1. Migration: atualizar `register_for_event`
+
+Adicionar as chaves em pt-BR usadas pelo formulário real:
+
+- Email: `'Endereço de E-mail'`, `'Endereço de Email'`, `'E-mail'` (além das já existentes)
+- Nome: já cobre `'Nome Completo'` ✅
+- WhatsApp: já cobre `'WhatsApp'` ✅
+
+E **backfill** das 7 inscrições existentes:
+
+```sql
+UPDATE registrations SET 
+  lead_email = lower(trim(COALESCE(data->>'Endereço de E-mail', data->>'email', ...))),
+  lead_name  = trim(COALESCE(data->>'Nome Completo', data->>'Full Name', ...)),
+  lead_whatsapp = regexp_replace(COALESCE(data->>'WhatsApp', ''), '\D', '', 'g')
+WHERE lead_email IS NULL;
 ```
-POST https://ahwecyjzzczcwunptxae.supabase.co/functions/v1/send-registration-confirmation
-→ HTTP 404
-```
 
-**A edge function nunca foi deployada.** Por isso:
+### 2. Reenvio dos e-mails pendentes
 
-- Não há **nenhum log** (`supabase--edge_function_logs` retorna vazio).
-- Nenhum e-mail foi enviado em nenhuma das tentativas.
-- O usuário não vê erro porque a chamada no client é fire-and-forget (`.catch(console.warn)`), e logs do client foram limpos.
+Após o backfill, as 7 inscrições terão `lead_email` válido e `tracking.confirmation_email_sent_at` ainda nulo (idempotência). Vou expor um endpoint admin simples ou reaproveitar a função existente: invocar `send-registration-confirmation` para cada `registrationId` recente via script único no console do navegador (forneço o snippet).
 
-A causa raiz é que o arquivo `supabase/functions/send-registration-confirmation/index.ts` foi criado, mas o deploy não aconteceu (ou falhou silenciosamente). Além disso, faltam dois reforços de robustez:
+### 3. Verificação pós-correção
 
-1. `**supabase/config.toml**` não declara a função com `verify_jwt = false`. A página `/register/:slug` é pública (lead não-autenticado), então sem isso o gateway pode rejeitar a chamada antes de chegar ao código da função.
-2. **Observabilidade zero no client**: o `.catch(console.warn)` esconde 401/403/404. Vou trocar por um log mais visível (sem incomodar o lead) para diagnóstico futuro.
-
-## Plano de correção
-
-### 1. Garantir deploy da edge function
-
-- Reescrever (idempotente) `supabase/functions/send-registration-confirmation/index.ts` para forçar o redeploy.
-- Adicionar bloco em `supabase/config.toml`:
-  ```toml
-  [functions.send-registration-confirmation]
-  verify_jwt = false
-  ```
-  Isso permite invocação pelo client público sem sessão (o lead não está logado).
-
-### 2. Melhorar observabilidade
-
-- No `Register.tsx`, trocar `console.warn` por `console.error` com prefixo `[confirmation-email]` e logar `status` + `body` da resposta quando `invoke` retornar erro. Sem `toast` ao lead — a inscrição em si foi bem-sucedida.
-- Acrescentar `console.log` na entrada da edge function ("[send-registration-confirmation] invoked", payload mínimo) para confirmar invocação ao testar.
-
-### 3. Validar pós-deploy
-
-- Após deploy, fazer uma chamada de teste via `curl` ao endpoint com um `registrationId` real e conferir os logs em tempo real.
-- Confirmar que `RESEND_API_KEY` e `LOVABLE_API_KEY` estão ativos como secrets (✅ já confirmados na configuração — Resend está conectado).
-
-### 4. Lembrete de sandbox (não é bug — só comunicação)
-
-A função usa `from: onboarding@resend.dev` (modo sandbox do Resend). **Nesse modo, o Resend só entrega para o e-mail dono da conta Resend (Filipe).** E-mails para qualquer outro destinatário são aceitos pela API mas **silenciosamente descartados/bounced** pelo Resend.
-
-- Para teste imediato: usar o e-mail do Filipe na inscrição.
-- Para produção real: verificar `centerfrios.com.br` no painel do Resend e trocar `FROM_ADDRESS` para `eventos@centerfrios.com.br`.
+- Conferir logs da edge function (`supabase--edge_function_logs`) para confirmar entrega.
+- Validar via `supabase--read_query` que `tracking.confirmation_email_sent_at` foi preenchido.
 
 ## Arquivos afetados
 
-- `**supabase/functions/send-registration-confirmation/index.ts**` — touch/reescrita idêntica para forçar redeploy + log de entrada.
-- `**supabase/config.toml**` — adicionar bloco `[functions.send-registration-confirmation]` com `verify_jwt = false`.
-- `**src/pages/Register.tsx**` — melhorar log de erro do `invoke` (sem afetar UX do lead).
+- **Migration SQL** (novo) — `CREATE OR REPLACE FUNCTION register_for_event(...)` com chaves pt-BR + UPDATE de backfill.
+- Nenhum arquivo de código frontend/edge precisa mudar — a edge function já lê `lead_email` corretamente; só faltava a coluna estar populada.
 
 ## Fora de escopo
 
-- Verificação do domínio `centerfrios.com.br` no Resend (ação manual no painel Resend; depende do DNS do cliente).
-- Persistir status detalhado de envio em `email_send_log` (a função já marca `tracking.confirmation_email_sent_at` para idempotência — suficiente por ora).  
+- Verificação do domínio `centerfrios.com` no Resend (ação manual).
+- Trocar `FROM_ADDRESS` para `eventos@centerfrios.com` (faço junto se você confirmar que o domínio já está verificado).  
   
-(Observação: nosso domínio não é "centerfrios.com.br" é "centerfrios.com")
+(O domínio já está verificado)
