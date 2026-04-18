@@ -8,7 +8,7 @@ const corsHeaders = {
 };
 
 const GATEWAY_URL = "https://connector-gateway.lovable.dev/resend";
-const FROM_ADDRESS = "Eventos Centerfrios <eventos@centerfrios.com>";
+const FROM_ADDRESS = "Eventos Centerfrios <eventos@eventos.centerfrios.com>";
 
 interface Payload {
   registrationId: string;
