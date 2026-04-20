@@ -216,6 +216,7 @@ export type Database = {
           field_type: string
           id: string
           label: string
+          options: Json | null
           placeholder: string | null
           position: number
           required: boolean
@@ -225,6 +226,7 @@ export type Database = {
           field_type?: string
           id?: string
           label: string
+          options?: Json | null
           placeholder?: string | null
           position?: number
           required?: boolean
@@ -234,6 +236,7 @@ export type Database = {
           field_type?: string
           id?: string
           label?: string
+          options?: Json | null
           placeholder?: string | null
           position?: number
           required?: boolean

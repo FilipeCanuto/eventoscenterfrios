@@ -4,6 +4,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useParams, useSearchParams } from "react-router-dom";
 import { CalendarDays, MapPin, Video, Globe, Loader2, Zap, Mail, QrCode, Clock, MessageCircle, Copy, Check, CheckCircle2 } from "lucide-react";
 import { useEventBySlug, Event } from "@/hooks/useEvents";
@@ -409,23 +410,43 @@ const RegistrationForm = ({
       const isPhone = isWhatsAppField(field.label);
       const value = formData[field.label] || "";
       const phoneInvalid = isPhone && field.required && value.length > 0 && !isValidBRPhone(value);
+      const isSelect = field.field_type === "select";
+      const options = Array.isArray((field as any).options) ? ((field as any).options as string[]) : [];
       return (
         <div key={field.id} className="space-y-2">
           <Label>{field.label}{field.required && " *"}</Label>
-          <Input
-            type={field.field_type === "email" ? "email" : isPhone ? "tel" : field.field_type === "tel" ? "tel" : "text"}
-            inputMode={isPhone ? "tel" : undefined}
-            placeholder={isPhone ? "(11) 99999-9999" : field.placeholder || field.label}
-            required={field.required}
-            value={value}
-            onChange={e => onFieldChange(field.label, isPhone ? maskBRPhone(e.target.value) : e.target.value)}
-            onBlur={e => onFieldBlur?.(field.label, e.target.value)}
-            aria-invalid={phoneInvalid || undefined}
-            className="h-12 text-base"
-            style={{ fontSize: "16px" }}
-          />
-          {phoneInvalid && (
-            <p className="text-xs text-destructive">Informe um WhatsApp válido com DDD, ex.: (11) 99999-9999.</p>
+          {isSelect ? (
+            <Select
+              value={value}
+              onValueChange={(v) => onFieldChange(field.label, v)}
+            >
+              <SelectTrigger className="h-12 text-base rounded-md" style={{ fontSize: "16px" }}>
+                <SelectValue placeholder={field.placeholder || `Selecione ${field.label.toLowerCase()}`} />
+              </SelectTrigger>
+              <SelectContent>
+                {options.map((opt) => (
+                  <SelectItem key={opt} value={opt}>{opt}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          ) : (
+            <>
+              <Input
+                type={field.field_type === "email" ? "email" : isPhone ? "tel" : field.field_type === "tel" ? "tel" : "text"}
+                inputMode={isPhone ? "tel" : undefined}
+                placeholder={isPhone ? "(11) 99999-9999" : field.placeholder || field.label}
+                required={field.required}
+                value={value}
+                onChange={e => onFieldChange(field.label, isPhone ? maskBRPhone(e.target.value) : e.target.value)}
+                onBlur={e => onFieldBlur?.(field.label, e.target.value)}
+                aria-invalid={phoneInvalid || undefined}
+                className="h-12 text-base"
+                style={{ fontSize: "16px" }}
+              />
+              {phoneInvalid && (
+                <p className="text-xs text-destructive">Informe um WhatsApp válido com DDD, ex.: (11) 99999-9999.</p>
+              )}
+            </>
           )}
         </div>
       );

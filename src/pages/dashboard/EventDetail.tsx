@@ -9,6 +9,7 @@ import { useEvent, useUpdateEvent, useDeleteEvent } from "@/hooks/useEvents";
 import { useFormFields, useAddFormField, useDeleteFormField } from "@/hooks/useFormFields";
 import { toast } from "sonner";
 import { useState } from "react";
+import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import TemplatePreview from "@/components/TemplatePreview";
 import EventDetailHeader from "@/components/event-detail/EventDetailHeader";
@@ -29,6 +30,7 @@ const EventDetail = () => {
   const deleteField = useDeleteFormField();
   const [newFieldLabel, setNewFieldLabel] = useState("");
   const [newFieldType, setNewFieldType] = useState("text");
+  const [newFieldOptions, setNewFieldOptions] = useState("");
 
   if (isLoading) {
     return <div className="flex items-center justify-center py-20"><Loader2 className="w-6 h-6 animate-spin text-primary" /></div>;
@@ -57,14 +59,24 @@ const EventDetail = () => {
 
   const handleAddField = async () => {
     if (!newFieldLabel.trim()) return;
+    let options: string[] | null = null;
+    if (newFieldType === "select") {
+      options = newFieldOptions.split("\n").map(o => o.trim()).filter(Boolean);
+      if (options.length < 2) {
+        toast.error("Adicione pelo menos 2 opções (uma por linha).");
+        return;
+      }
+    }
     await addField.mutateAsync({
       event_id: event.id,
       label: newFieldLabel,
       field_type: newFieldType,
       required: false,
       position: (formFields?.length ?? 0),
+      ...(options ? { options } as any : {}),
     });
     setNewFieldLabel("");
+    setNewFieldOptions("");
     toast.success("Campo adicionado");
   };
 
@@ -154,11 +166,16 @@ const EventDetail = () => {
               <h3 className="font-display font-semibold">Campos do formulário</h3>
               {formFields?.map((field) => (
                 <div key={field.id} className="flex items-center justify-between p-3 rounded-xl bg-muted/50">
-                  <div>
+                  <div className="min-w-0">
                     <span className="text-sm font-medium">{field.label}</span>
                     <span className="text-xs text-muted-foreground ml-2">({field.field_type})</span>
+                    {field.field_type === "select" && Array.isArray((field as any).options) && (
+                      <p className="text-xs text-muted-foreground mt-0.5 truncate">
+                        Opções: {((field as any).options as string[]).join(", ")}
+                      </p>
+                    )}
                   </div>
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 shrink-0">
                     <Badge variant="outline" className="text-xs rounded-full">{field.required ? "Obrigatório" : "Opcional"}</Badge>
                     <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => deleteField.mutate({ id: field.id, eventId: event.id })}>
                       <Trash2 className="w-3.5 h-3.5 text-destructive" />
@@ -166,18 +183,29 @@ const EventDetail = () => {
                   </div>
                 </div>
               ))}
-              <div className="flex flex-col sm:flex-row gap-2">
-                <Input placeholder="Nome do campo" value={newFieldLabel} onChange={e => setNewFieldLabel(e.target.value)} className="flex-1 rounded-full" />
-                <Select value={newFieldType} onValueChange={setNewFieldType}>
-                  <SelectTrigger className="w-full sm:w-28 rounded-full"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="text">Texto</SelectItem>
-                    <SelectItem value="email">E-mail</SelectItem>
-                    <SelectItem value="tel">Telefone</SelectItem>
-                    <SelectItem value="url">URL</SelectItem>
-                  </SelectContent>
-                </Select>
-                <Button variant="outline" onClick={handleAddField} className="rounded-full">Adicionar</Button>
+              <div className="space-y-2">
+                <div className="flex flex-col sm:flex-row gap-2">
+                  <Input placeholder="Nome do campo" value={newFieldLabel} onChange={e => setNewFieldLabel(e.target.value)} className="flex-1 rounded-full" />
+                  <Select value={newFieldType} onValueChange={setNewFieldType}>
+                    <SelectTrigger className="w-full sm:w-32 rounded-full"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="text">Texto</SelectItem>
+                      <SelectItem value="email">E-mail</SelectItem>
+                      <SelectItem value="tel">Telefone</SelectItem>
+                      <SelectItem value="url">URL</SelectItem>
+                      <SelectItem value="select">Lista (dropdown)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <Button variant="outline" onClick={handleAddField} className="rounded-full">Adicionar</Button>
+                </div>
+                {newFieldType === "select" && (
+                  <Textarea
+                    placeholder="Opções (uma por linha)&#10;Ex.:&#10;Supermercado&#10;Açougue&#10;Restaurante"
+                    value={newFieldOptions}
+                    onChange={e => setNewFieldOptions(e.target.value)}
+                    className="rounded-xl min-h-[100px]"
+                  />
+                )}
               </div>
             </div>
             <div className="bg-muted/30 rounded-xl p-5 sm:p-6">
