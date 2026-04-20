@@ -2,9 +2,23 @@ import { useState, useMemo } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Search, Download, Loader2, ArrowUp, ArrowDown, ArrowUpDown, ChevronLeft, ChevronRight } from "lucide-react";
-import { useRegistrationsByEvent } from "@/hooks/useRegistrations";
+import { Search, Download, Loader2, ArrowUp, ArrowDown, ArrowUpDown, ChevronLeft, ChevronRight, Trash2, CheckCircle } from "lucide-react";
+import { useRegistrationsByEvent, useCancelRegistration, useCheckInRegistration } from "@/hooks/useRegistrations";
+import RegistrationDetailDialog from "@/components/dashboard/RegistrationDetailDialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { toast } from "sonner";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 
@@ -33,18 +47,19 @@ const PAGE_SIZE = 15;
 
 export default function EventAttendeesTable({ eventId }: { eventId: string }) {
   const [search, setSearch] = useState("");
+  const [hideCancelled, setHideCancelled] = useState(true);
   const [sortColumn, setSortColumn] = useState<SortColumn>("date");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
   const [page, setPage] = useState(0);
+  const [selected, setSelected] = useState<any>(null);
+  const [confirmCancelId, setConfirmCancelId] = useState<string | null>(null);
   const { data: registrations, isLoading } = useRegistrationsByEvent(eventId);
+  const cancelMut = useCancelRegistration();
+  const checkInMut = useCheckInRegistration();
 
   const handleSort = (col: SortColumn) => {
-    if (sortColumn === col) {
-      setSortDir(d => d === "asc" ? "desc" : "asc");
-    } else {
-      setSortColumn(col);
-      setSortDir("asc");
-    }
+    if (sortColumn === col) setSortDir(d => d === "asc" ? "desc" : "asc");
+    else { setSortColumn(col); setSortDir("asc"); }
     setPage(0);
   };
 
@@ -66,6 +81,7 @@ export default function EventAttendeesTable({ eventId }: { eventId: string }) {
 
   const filtered = useMemo(() => {
     let items = registrations?.filter(r => {
+      if (hideCancelled && r.status === "cancelled") return false;
       if (!search) return true;
       const data = r.data as Record<string, string>;
       return Object.values(data).some(v => typeof v === "string" && v.toLowerCase().includes(search.toLowerCase()));
@@ -79,7 +95,7 @@ export default function EventAttendeesTable({ eventId }: { eventId: string }) {
     });
 
     return items;
-  }, [registrations, search, sortColumn, sortDir]);
+  }, [registrations, search, hideCancelled, sortColumn, sortDir]);
 
   const totalPages = Math.ceil(filtered.length / PAGE_SIZE);
   const paged = filtered.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
@@ -101,9 +117,7 @@ export default function EventAttendeesTable({ eventId }: { eventId: string }) {
     const escapeCSV = (val: string): string => {
       const str = String(val ?? "");
       const safe = str.replace(/^([=+\-@])/, "'$1");
-      if (safe.includes(',') || safe.includes('"') || safe.includes('\n')) {
-        return `"${safe.replace(/"/g, '""')}"`;
-      }
+      if (safe.includes(',') || safe.includes('"') || safe.includes('\n')) return `"${safe.replace(/"/g, '""')}"`;
       return safe;
     };
     const csv = [headers, ...rows].map(r => r.map(escapeCSV).join(",")).join("\n");
@@ -116,16 +130,40 @@ export default function EventAttendeesTable({ eventId }: { eventId: string }) {
     URL.revokeObjectURL(url);
   };
 
+  const handleCancel = async () => {
+    if (!confirmCancelId) return;
+    try {
+      await cancelMut.mutateAsync(confirmCancelId);
+      toast.success("Inscrição cancelada");
+      setConfirmCancelId(null);
+    } catch (e: any) {
+      toast.error(e?.message || "Erro ao cancelar");
+    }
+  };
+
+  const handleCheckIn = async (id: string) => {
+    try {
+      await checkInMut.mutateAsync(id);
+      toast.success("Check-in realizado");
+    } catch (e: any) {
+      toast.error(e?.message || "Erro");
+    }
+  };
+
   return (
     <div className="space-y-4">
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
         <h3 className="text-lg font-display font-semibold">
           Participantes {filtered.length > 0 && <span className="text-muted-foreground font-normal text-sm">({filtered.length})</span>}
         </h3>
-        <div className="flex items-center gap-2 w-full sm:w-auto">
+        <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
           <div className="relative flex-1 sm:flex-initial sm:w-56">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
             <Input placeholder="Buscar…" className="pl-9 h-8 text-sm rounded-full" value={search} onChange={e => { setSearch(e.target.value); setPage(0); }} />
+          </div>
+          <div className="flex items-center gap-1.5">
+            <Switch id="hide-cancelled-evt" checked={hideCancelled} onCheckedChange={(v) => { setHideCancelled(v); setPage(0); }} />
+            <Label htmlFor="hide-cancelled-evt" className="text-xs cursor-pointer">Ocultar canceladas</Label>
           </div>
           <Button variant="outline" size="sm" className="h-8 text-xs shrink-0 rounded-full" onClick={handleExportCSV}>
             <Download className="w-3.5 h-3.5 mr-1" /> Exportar
@@ -147,6 +185,7 @@ export default function EventAttendeesTable({ eventId }: { eventId: string }) {
                   <TableHead className="cursor-pointer select-none" onClick={() => handleSort("email")}>
                     <span className="flex items-center">E-mail <SortIcon col="email" /></span>
                   </TableHead>
+                  <TableHead className="hidden lg:table-cell">WhatsApp</TableHead>
                   <TableHead className="cursor-pointer select-none hidden md:table-cell" onClick={() => handleSort("source")}>
                     <span className="flex items-center">Origem <SortIcon col="source" /></span>
                   </TableHead>
@@ -156,6 +195,7 @@ export default function EventAttendeesTable({ eventId }: { eventId: string }) {
                   <TableHead className="cursor-pointer select-none" onClick={() => handleSort("date")}>
                     <span className="flex items-center">Data <SortIcon col="date" /></span>
                   </TableHead>
+                  <TableHead className="text-right">Ações</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -163,16 +203,44 @@ export default function EventAttendeesTable({ eventId }: { eventId: string }) {
                   const data = r.data as Record<string, string>;
                   const source = getSource(r);
                   return (
-                    <TableRow key={r.id}>
+                    <TableRow key={r.id} className="cursor-pointer" onClick={() => setSelected(r)}>
                       <TableCell className="font-medium">{r.lead_name || data["Full Name"] || data["Name"] || "—"}</TableCell>
                       <TableCell className="text-muted-foreground text-sm">{r.lead_email || data["Email Address"] || data["Email"] || "—"}</TableCell>
+                      <TableCell className="hidden lg:table-cell text-sm text-muted-foreground">{r.lead_whatsapp || data["WhatsApp"] || data["Telefone"] || "—"}</TableCell>
                       <TableCell className="hidden md:table-cell">
                         <Badge variant="outline" className="text-xs rounded-full capitalize">{source}</Badge>
                       </TableCell>
                       <TableCell>
                         <Badge className={`${statusStyle[r.status] || ""} text-xs`}>{statusLabels[r.status] || r.status.replace("_", " ")}</Badge>
                       </TableCell>
-                      <TableCell className="text-muted-foreground text-sm">{format(new Date(r.created_at), "d MMM yyyy", { locale: ptBR })}</TableCell>
+                      <TableCell className="text-muted-foreground text-sm whitespace-nowrap">{format(new Date(r.created_at), "d MMM HH:mm", { locale: ptBR })}</TableCell>
+                      <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
+                        <div className="flex items-center justify-end gap-1">
+                          {r.status === "registered" && (
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8 rounded-full text-success hover:text-success hover:bg-success/10"
+                              title="Marcar check-in"
+                              onClick={() => handleCheckIn(r.id)}
+                              disabled={checkInMut.isPending}
+                            >
+                              <CheckCircle className="w-4 h-4" />
+                            </Button>
+                          )}
+                          {r.status !== "cancelled" && (
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8 rounded-full text-destructive hover:text-destructive hover:bg-destructive/10"
+                              title="Cancelar inscrição"
+                              onClick={() => setConfirmCancelId(r.id)}
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </Button>
+                          )}
+                        </div>
+                      </TableCell>
                     </TableRow>
                   );
                 })}
@@ -202,6 +270,25 @@ export default function EventAttendeesTable({ eventId }: { eventId: string }) {
           {search ? "Nenhum participante encontrado." : "Nenhuma inscrição ainda."}
         </div>
       )}
+
+      <RegistrationDetailDialog registration={selected} onClose={() => setSelected(null)} />
+
+      <AlertDialog open={!!confirmCancelId} onOpenChange={(o) => !o && setConfirmCancelId(null)}>
+        <AlertDialogContent className="rounded-2xl">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Cancelar inscrição?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Esta ação cancela a inscrição e libera a vaga. O histórico será mantido.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel className="rounded-full">Voltar</AlertDialogCancel>
+            <AlertDialogAction onClick={handleCancel} className="rounded-full bg-destructive text-destructive-foreground hover:bg-destructive/90">
+              Sim, cancelar
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
