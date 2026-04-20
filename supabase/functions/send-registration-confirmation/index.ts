@@ -72,14 +72,17 @@ function buildPlainText(p: EmailContext, origin: string) {
     : "Local: a definir";
   const greet = p.recipientName?.trim() ? `Olá, ${p.recipientName.trim()}!` : "Olá!";
   const url = `${origin}/register/${encodeURIComponent(p.eventSlug)}`;
+  const checkInUrl = `${origin}/check-in/${p.registrationId}`;
+  const cleanName = sanitizeSubject(p.eventName);
   return [
     greet,
     "",
-    `Sua inscrição em "${p.eventName}" foi confirmada.`,
+    `Sua inscrição em "${cleanName}" foi confirmada.`,
     "",
     `Quando: ${when}`,
     where,
     "",
+    `Seu ingresso digital (check-in): ${checkInUrl}`,
     `Página do evento: ${url}`,
     "",
     "Guarde este e-mail como comprovante. Enviaremos lembretes próximos da data.",
@@ -87,6 +90,10 @@ function buildPlainText(p: EmailContext, origin: string) {
     "Equipe Eventos Centerfrios",
     `Para parar de receber estes avisos, responda este e-mail com "sair".`,
   ].join("\n");
+}
+
+function sanitizeSubject(s: string) {
+  return (s || "").replace(/[\r\n\t]+/g, " ").replace(/\s{2,}/g, " ").trim();
 }
 
 function buildHtml(p: EmailContext, origin: string) {
