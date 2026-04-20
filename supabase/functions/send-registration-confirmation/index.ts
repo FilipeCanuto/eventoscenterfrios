@@ -41,6 +41,7 @@ const REPLY_TO_ADDRESS = "contato@eventos.centerfrios.com";
 const UNSUBSCRIBE_MAILTO = "contato@eventos.centerfrios.com";
 
 interface EmailContext {
+  registrationId: string;
   recipientEmail: string;
   recipientName: string;
   eventName: string;
@@ -72,14 +73,17 @@ function buildPlainText(p: EmailContext, origin: string) {
     : "Local: a definir";
   const greet = p.recipientName?.trim() ? `Olá, ${p.recipientName.trim()}!` : "Olá!";
   const url = `${origin}/register/${encodeURIComponent(p.eventSlug)}`;
+  const checkInUrl = `${origin}/check-in/${p.registrationId}`;
+  const cleanName = sanitizeSubject(p.eventName);
   return [
     greet,
     "",
-    `Sua inscrição em "${p.eventName}" foi confirmada.`,
+    `Sua inscrição em "${cleanName}" foi confirmada.`,
     "",
     `Quando: ${when}`,
     where,
     "",
+    `Seu ingresso digital (check-in): ${checkInUrl}`,
     `Página do evento: ${url}`,
     "",
     "Guarde este e-mail como comprovante. Enviaremos lembretes próximos da data.",
@@ -87,6 +91,10 @@ function buildPlainText(p: EmailContext, origin: string) {
     "Equipe Eventos Centerfrios",
     `Para parar de receber estes avisos, responda este e-mail com "sair".`,
   ].join("\n");
+}
+
+function sanitizeSubject(s: string) {
+  return (s || "").replace(/[\r\n\t]+/g, " ").replace(/\s{2,}/g, " ").trim();
 }
 
 function buildHtml(p: EmailContext, origin: string) {
@@ -116,6 +124,8 @@ function buildHtml(p: EmailContext, origin: string) {
   const locationLabel = isOnline ? "Link de acesso" : "Local";
 
   const eventUrl = `${origin}/register/${encodeURIComponent(p.eventSlug)}`;
+  const checkInUrl = `${origin}/check-in/${p.registrationId}`;
+  const qrSrc = `https://api.qrserver.com/v1/create-qr-code/?size=240x240&margin=2&data=${encodeURIComponent(checkInUrl)}`;
   const logoBlock = p.logoUrl
     ? `<img src="${escapeHtml(p.logoUrl)}" alt="" height="40" style="display:block;margin:0 auto 12px;max-height:40px"/>`
     : "";
@@ -155,7 +165,19 @@ function buildHtml(p: EmailContext, origin: string) {
             <tr><td style="font-size:12px;text-transform:uppercase;letter-spacing:.06em;color:#6b7280;padding-bottom:6px">${locationLabel}</td></tr>
             <tr><td style="font-size:15px;color:#111;line-height:1.5">${locationBlock}</td></tr>
           </table>
-          <div style="text-align:center;margin:24px 0 8px">
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#ffffff;border:1px solid #eef0f3;border-radius:14px;padding:20px;margin:0 0 8px">
+            <tr><td style="text-align:center;font-size:12px;text-transform:uppercase;letter-spacing:.06em;color:#6b7280;padding-bottom:10px">Seu ingresso digital</td></tr>
+            <tr><td style="text-align:center;padding-bottom:10px">
+              <a href="${checkInUrl}" style="display:inline-block;text-decoration:none">
+                <img src="${qrSrc}" alt="QR Code de check-in" width="220" height="220" style="display:block;width:220px;height:220px;border:0"/>
+              </a>
+            </td></tr>
+            <tr><td style="text-align:center;font-size:13px;color:#6b7280;line-height:1.5">
+              Apresente este QR Code na entrada do evento.<br/>
+              <a href="${checkInUrl}" style="color:${brand};text-decoration:none;font-weight:600">Ou clique aqui para fazer check-in</a>
+            </td></tr>
+          </table>
+          <div style="text-align:center;margin:20px 0 8px">
             <a href="${eventUrl}" style="display:inline-block;background:${brand};color:#fff;text-decoration:none;font-weight:600;padding:14px 26px;border-radius:999px;font-size:15px">Ver página do evento</a>
           </div>
           <p style="margin:20px 0 0;font-size:13px;color:#6b7280;line-height:1.55">
@@ -257,6 +279,7 @@ serve(async (req) => {
     }
 
     const ctx: EmailContext = {
+      registrationId: reg.id,
       recipientEmail,
       recipientName: reg.lead_name || "",
       eventName: ev.name,
@@ -278,7 +301,7 @@ serve(async (req) => {
 
     const html = buildHtml(ctx, origin);
     const text = buildPlainText(ctx, origin);
-    const subject = `Inscrição confirmada — ${ctx.eventName}`;
+    const subject = sanitizeSubject(`Inscrição confirmada — ${ctx.eventName}`);
 
     const resp = await fetch(`${GATEWAY_URL}/emails`, {
       method: "POST",
