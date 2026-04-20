@@ -124,6 +124,8 @@ function buildHtml(p: EmailContext, origin: string) {
   const locationLabel = isOnline ? "Link de acesso" : "Local";
 
   const eventUrl = `${origin}/register/${encodeURIComponent(p.eventSlug)}`;
+  const checkInUrl = `${origin}/check-in/${p.registrationId}`;
+  const qrSrc = `https://api.qrserver.com/v1/create-qr-code/?size=240x240&margin=2&data=${encodeURIComponent(checkInUrl)}`;
   const logoBlock = p.logoUrl
     ? `<img src="${escapeHtml(p.logoUrl)}" alt="" height="40" style="display:block;margin:0 auto 12px;max-height:40px"/>`
     : "";
