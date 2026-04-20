@@ -345,7 +345,7 @@ const EventInfo = ({ event, className = "" }: { event: Event; className?: string
           )}
         </div>
       )}
-      <h1 className="text-2xl sm:text-4xl font-display font-extrabold whitespace-pre-line md:text-8xl">{event.name}</h1>
+      <h1 className="text-2xl sm:text-4xl font-display font-extrabold whitespace-pre-line md:text-9xl">{event.name}</h1>
       {description && (
         <div className="mt-4 mb-4">
           <p className="text-muted-foreground text-sm leading-relaxed">
