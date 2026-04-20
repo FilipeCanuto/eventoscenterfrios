@@ -481,14 +481,67 @@ const Register = () => {
   const [consent, setConsent] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const utmsRef = useRef<Record<string, string>>({});
+  const formStartedRef = useRef(false);
+  const lastTrackedRef = useRef<{ email?: string; name?: string; whatsapp?: string }>({});
 
   useEffect(() => {
     utmsRef.current = captureUtms(searchParams);
   }, [searchParams]);
 
+  // Tracking: registra a visita assim que o evento é carregado
+  useEffect(() => {
+    if (!event?.id) return;
+    trackPageView(event.id, buildInitialPayload(searchParams));
+  }, [event?.id, searchParams]);
+
+  // Tracking: marca abandono quando o usuário sai sem submeter
+  useEffect(() => {
+    if (!event?.id) return;
+    const handleAbandon = () => {
+      if (formStartedRef.current && !submitted) {
+        trackPageView(event.id, { form_abandoned: true });
+      }
+    };
+    const handleVisibility = () => {
+      if (document.visibilityState === "hidden") handleAbandon();
+    };
+    window.addEventListener("beforeunload", handleAbandon);
+    document.addEventListener("visibilitychange", handleVisibility);
+    return () => {
+      window.removeEventListener("beforeunload", handleAbandon);
+      document.removeEventListener("visibilitychange", handleVisibility);
+    };
+  }, [event?.id, submitted]);
+
   const handleFieldChange = useCallback((label: string, value: string) => {
     setFormData(prev => ({ ...prev, [label]: value }));
-  }, []);
+    if (!formStartedRef.current && event?.id) {
+      formStartedRef.current = true;
+      trackPageView(event.id, { form_started: true });
+    }
+  }, [event?.id]);
+
+  const handleFieldBlur = useCallback((label: string, value: string) => {
+    if (!event?.id || !value?.trim()) return;
+    const lower = label.toLowerCase();
+    const payload: Parameters<typeof trackPageView>[1] = {};
+    if (lower.includes("e-mail") || lower.includes("email")) {
+      if (lastTrackedRef.current.email === value) return;
+      lastTrackedRef.current.email = value;
+      payload.partial_email = value;
+    } else if (lower.includes("nome") || lower.includes("name")) {
+      if (lastTrackedRef.current.name === value) return;
+      lastTrackedRef.current.name = value;
+      payload.partial_name = value;
+    } else if (isWhatsAppField(label)) {
+      if (lastTrackedRef.current.whatsapp === value) return;
+      lastTrackedRef.current.whatsapp = value;
+      payload.partial_whatsapp = value;
+    } else {
+      return;
+    }
+    trackPageView(event.id, payload);
+  }, [event?.id]);
 
   useEffect(() => {
     if (!event) return;
@@ -647,7 +700,7 @@ const Register = () => {
     const shareUrl = typeof window !== "undefined" ? `${window.location.origin}/register/${event.slug}` : "";
     return wrapDark(
       <div className="min-h-screen flex items-center justify-center px-4 py-12 bg-background text-foreground" style={{ background: isDark ? undefined : `linear-gradient(135deg, ${brandColor}15, ${brandColor}05)` }}>
-        <SuccessCard brandColor={brandColor} eventName={event.name} name={formData["Nome Completo"] || formData["Nome"] || formData["Name"] || ""} shareUrl={shareUrl} />
+        <SuccessCard brandColor={brandColor} event={event} name={formData["Nome Completo"] || formData["Nome"] || formData["Name"] || ""} shareUrl={shareUrl} />
       </div>
     );
   }
