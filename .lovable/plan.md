@@ -1,148 +1,52 @@
 
-
 ## Objetivo
 
-Três entregas para a página de inscrição do evento:
-1. Página "Obrigado" mais profissional, com a arte/identidade visual do evento.
-2. E-mail de confirmação com a arte do evento (header com a flyer, não só cor).
-3. Rastreamento de leads que **acessaram a página de inscrição mas não se inscreveram**.
+Refinar a página "Obrigado" (`SuccessCard` em `src/pages/Register.tsx`):
+1. **Remover** o banner/flyer do evento do topo do card.
+2. **Aplicar o tema do evento** à página inteira (cor primária, color_mode, tipografia) — não só ao card.
+3. **Dar muito mais destaque** à mensagem de confirmação ("Inscrição confirmada") e à mensagem principal.
 
----
+## Mudanças
 
-## 1. Página "Obrigado" — redesign com a arte do evento
+### 1. Remover o hero da flyer
+- Tirar o bloco `<img src={background_image_url}>` do topo do `SuccessCard`.
+- Remover também o overlay com logo sobreposto.
 
-Arquivo: `src/pages/Register.tsx` (componente `SuccessCard`).
+### 2. Aplicar o tema à página toda
+Hoje só o card tem cor de marca; o fundo da página é neutro. Vou:
+- Envolver toda a tela de sucesso num container que respeita `event.color_mode` (claro/escuro) e usa `primary_color` como acento.
+- Fundo da página: gradiente sutil derivado da `primary_color` (ex: `linear-gradient(180deg, primary/8%, background)`) — mesma lógica visual da página de inscrição, para continuidade.
+- Logo do evento (se houver) reposicionado no topo da página, acima do card, em tamanho médio — substitui a função visual do banner sem ser pesado.
+- Tipografia: Bricolage Grotesque já em uso, manter.
 
-Hoje o card é genérico (ícone + cor primária). Vou reconstruir para parecer um "ingresso/cartão de presença" temático:
+### 3. Hierarquia da confirmação (muito mais evidência)
+Reorganizar o card em três blocos verticais bem espaçados:
 
-- **Header visual com a flyer do evento** (`background_image_url`) como hero — mesma arte que o inscrito viu na página, agora coroada com um selo "Inscrição confirmada".
-- **Logo do evento** (se existir `logo_url`) sobreposto sobre a arte.
-- **Nome do evento** em destaque tipográfico (Bricolage Grotesque, igual ao restante).
-- **Bloco "ingresso"** com data/hora formatada e local — replicando o padrão visual usado no e-mail (linhas com label uppercase + valor).
-- **Selo de confirmação** mais elegante (check + "Presença garantida") em vez do popper emoji.
-- **CTAs** mantidos: WhatsApp + copiar link, mas com estilo de pill alinhado à identidade.
-- **Confetti** mantido (suave, com cor primária do evento).
-- **Remoção** do "🎉" no título — gatilho visual amador. Trocar por "Tudo certo!" ou "Você está dentro".
-- Suporte a `color_mode` claro/escuro (já existente).
+**Bloco 1 — Selo + título (ENORME):**
+- Selo circular grande (80–96px) com check, usando `primary_color` de fundo.
+- Título principal: **"Inscrição confirmada"** em `text-4xl md:text-6xl`, font-bold, tracking apertado. Esta é A mensagem.
+- Subtítulo logo abaixo, mais suave: "Você está garantido(a) no [nome do evento]".
 
-Resultado: o "Obrigado" deixa de ser um card genérico e passa a ser uma extensão visual da página do evento — mesma arte, mesma cor, mesma tipografia, mas com a mensagem de confirmação.
+**Bloco 2 — Mensagem principal em destaque:**
+- Card/bloco interno com a mensagem personalizada (ou padrão "Enviamos os detalhes para seu e-mail. Salve a data!"), em `text-lg md:text-xl`, com bom respiro (py-6).
+- Linha divisória sutil com a cor primária.
 
----
+**Bloco 3 — Detalhes do evento (ticket-style mantido, mas secundário):**
+- Data/hora + local em formato compacto, labels uppercase pequenas, valores em peso médio.
+- Visualmente menor que o título — função de referência, não de destaque.
 
-## 2. E-mail de confirmação — incorporar a arte do evento
+**Bloco 4 — CTAs:**
+- WhatsApp + copiar link, mantidos como pills, alinhados horizontalmente em desktop e empilhados em mobile.
 
-Arquivo: `supabase/functions/send-registration-confirmation/index.ts` (função `buildHtml`).
+### 4. Confetti
+- Mantido, com a cor primária do evento.
 
-Hoje o header do e-mail é só uma faixa colorida (`brand`) com o nome do evento. Vou trocar por:
+## Arquivos alterados
 
-- **Hero com a flyer do evento** (`background_image_url`) no topo do e-mail — imagem responsiva, largura 560px, altura proporcional, sem cortar (estilo `object-fit: contain` simulado via tabela com background neutro).
-- **Logo sobreposto/abaixo da flyer** (se existir).
-- **Faixa de cor primária** mais fina logo abaixo da arte, com a tag "INSCRIÇÃO CONFIRMADA".
-- Manter o restante do conteúdo (Quando, Local, CTA, footer) — já está bom.
-- Fallback: se `background_image_url` não existir, mantém o header colorido atual.
-- Garantir compatibilidade com clientes de e-mail (Outlook, Gmail) — usar `<img>` com `width`, `style="display:block;max-width:100%;height:auto"`, `alt` descritivo.
+- `src/pages/Register.tsx` — apenas o componente `SuccessCard` e o wrapper de página de sucesso. Sem mudanças em tracking, e-mail ou banco.
 
-Importante: e-mails com 1 imagem grande no topo + texto bem estruturado têm boa deliverability se a proporção texto/imagem for mantida (~40/60). Vou garantir.
+## Validação
 
----
-
-## 3. Rastreamento de leads que acessaram mas não se inscreveram
-
-### Estratégia
-
-Criar uma tabela `event_page_views` que registra **cada visita anônima à página de inscrição**, com identificador estável de visitante (cookie-like via `localStorage`) para depois cruzar com `registrations` e identificar quem **viu mas não converteu**.
-
-### Schema novo (migration)
-
-```sql
-CREATE TABLE event_page_views (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  event_id uuid NOT NULL,
-  visitor_id text NOT NULL,        -- ID estável gerado no cliente
-  session_id text NOT NULL,        -- ID por aba/sessão
-  created_at timestamptz NOT NULL DEFAULT now(),
-  referrer text,
-  landing_url text,
-  utm_source text,
-  utm_medium text,
-  utm_campaign text,
-  utm_term text,
-  utm_content text,
-  device_type text,
-  user_agent text,
-  -- Capturas progressivas (lead parcial)
-  partial_email text,              -- preenchido se digitou no campo
-  partial_name text,
-  partial_whatsapp text,
-  form_started_at timestamptz,     -- primeira interação com o form
-  form_abandoned_at timestamptz,   -- saiu sem submeter
-  converted_registration_id uuid   -- preenchido se essa visita virou inscrição
-);
-
-CREATE INDEX ON event_page_views (event_id, created_at DESC);
-CREATE INDEX ON event_page_views (event_id, visitor_id);
-CREATE INDEX ON event_page_views (event_id, partial_email) WHERE partial_email IS NOT NULL;
-```
-
-### RLS
-
-- `INSERT`: público (anon + authenticated) — campos limitados, sem PII além do que o usuário digitou.
-- `UPDATE`: público mas restrito por `visitor_id` + `session_id` recentes (≤30min) — para upsert progressivo.
-- `SELECT`: somente o dono do evento (`events.user_id = auth.uid()`).
-
-Para garantir UPDATE seguro, vou criar uma função RPC `track_page_view(p_event_id, p_visitor_id, p_session_id, p_data jsonb)` que faz upsert idempotente por `(event_id, session_id)` — evita poluir RLS com lógica complexa.
-
-### Captura no front (Register.tsx)
-
-- **Ao montar a página**: gera/recupera `visitor_id` (localStorage, persistente) e `session_id` (sessionStorage, por aba). Chama RPC `track_page_view` com UTMs, referrer, device.
-- **Ao iniciar o form** (primeiro `onChange`): UPDATE marca `form_started_at`.
-- **A cada blur** nos campos email/nome/whatsapp: UPDATE com captura progressiva (`partial_email`, `partial_name`, `partial_whatsapp`) — captura o lead "morno" mesmo se ele desistir.
-- **Ao submeter com sucesso**: UPDATE marca `converted_registration_id`.
-- **Ao sair sem submeter** (`beforeunload` ou `visibilitychange`): UPDATE marca `form_abandoned_at`.
-
-Tudo com debounce e tolerância a erro de rede (não bloqueia UX).
-
-### Visualização no dashboard
-
-Nova aba **"Leads não convertidos"** dentro do `EventDetail` (`src/pages/dashboard/EventDetail.tsx`):
-
-- Tabela com: data/hora, e-mail parcial (se capturado), nome parcial, WhatsApp parcial, UTMs, status (visitou / iniciou form / abandonou form).
-- Filtros: somente com e-mail capturado, somente abandonos de form, por origem UTM.
-- Métricas no topo: Total de visitas únicas, Iniciaram form, Abandonaram form, **Taxa de conversão** (registrations / visitas únicas).
-- Botão "Exportar CSV" para o time fazer follow-up manual via WhatsApp/e-mail.
-
-Hook novo: `src/hooks/useEventPageViews.ts`.
-
----
-
-## Arquivos alterados/criados
-
-**Novos:**
-- `supabase/migrations/<timestamp>_event_page_views.sql` — tabela, índices, RLS, RPC `track_page_view`.
-- `src/hooks/useEventPageViews.ts` — query + mutation.
-- `src/lib/visitorTracking.ts` — helpers `getVisitorId()`, `getSessionId()`, `trackPageView()`, `trackProgressiveLead()`.
-- `src/components/event-detail/EventLeadsTable.tsx` — tabela de leads não convertidos.
-
-**Modificados:**
-- `src/pages/Register.tsx` — redesign do `SuccessCard` + integração com tracking.
-- `supabase/functions/send-registration-confirmation/index.ts` — `buildHtml` com hero da flyer.
-- `src/pages/dashboard/EventDetail.tsx` — nova aba/seção "Leads".
-
----
-
-## Validação pós-deploy
-
-1. Acessar a página pública sem se inscrever → conferir registro em `event_page_views`.
-2. Começar a preencher e abandonar → conferir captura parcial de e-mail.
-3. Concluir inscrição → conferir `converted_registration_id` preenchido + nova arte na página "Obrigado".
-4. Abrir o e-mail recebido → conferir flyer no topo, layout consistente em Gmail e Outlook.
-5. Abrir aba "Leads" no dashboard do evento → conferir tabela e métricas.
-
----
-
-## Fora de escopo (posso fazer depois se quiser)
-
-- Notificação automática para o dono do evento quando alguém abandona o form com e-mail capturado.
-- Disparo de e-mail de "esqueceu de finalizar?" para leads parciais (precisa de opt-in/consent — sensível).
-- Heatmap de scroll/cliques na página de inscrição.
-
+1. Concluir uma inscrição → ver a nova página com tema do evento aplicado, sem banner, com "Inscrição confirmada" gigante no topo.
+2. Testar em mobile e desktop.
+3. Testar com evento de `color_mode: dark` para garantir que o tema escuro funciona.
