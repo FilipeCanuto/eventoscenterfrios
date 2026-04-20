@@ -279,6 +279,7 @@ serve(async (req) => {
     }
 
     const ctx: EmailContext = {
+      registrationId: reg.id,
       recipientEmail,
       recipientName: reg.lead_name || "",
       eventName: ev.name,
@@ -300,7 +301,7 @@ serve(async (req) => {
 
     const html = buildHtml(ctx, origin);
     const text = buildPlainText(ctx, origin);
-    const subject = `Inscrição confirmada — ${ctx.eventName}`;
+    const subject = sanitizeSubject(`Inscrição confirmada — ${ctx.eventName}`);
 
     const resp = await fetch(`${GATEWAY_URL}/emails`, {
       method: "POST",
