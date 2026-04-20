@@ -133,9 +133,23 @@ function isValidBRPhone(value: string) {
   return digits.length === 10 || digits.length === 11;
 }
 
-const SuccessCard = ({ brandColor, eventName, name, shareUrl }: { brandColor: string; eventName: string; name: string; shareUrl: string }) => {
+const SuccessCard = ({
+  brandColor,
+  event,
+  name,
+  shareUrl,
+}: {
+  brandColor: string;
+  event: Event;
+  name: string;
+  shareUrl: string;
+}) => {
   const firstName = (name || "").trim().split(/\s+/)[0] || "";
   const [copied, setCopied] = useState(false);
+  const dt = formatEventDateTimeParts(event);
+  const flyerUrl = event.background_image_url;
+  const logoUrl = event.logo_url;
+  const locationLabel = event.location_type === "physical" ? "Presencial" : event.location_type === "hybrid" ? "Híbrido" : "Online";
 
   useEffect(() => {
     const colors = [brandColor, "#FFD166", "#06D6A0", "#118AB2", "#EF476F"];
@@ -147,7 +161,7 @@ const SuccessCard = ({ brandColor, eventName, name, shareUrl }: { brandColor: st
     fire(500, { particleCount: 80, angle: 120, spread: 60, origin: { x: 1, y: 0.7 } });
   }, [brandColor]);
 
-  const shareText = `Acabei de garantir minha vaga em ${eventName}! Garanta a sua também:`;
+  const shareText = `Acabei de garantir minha vaga em ${event.name}! Garanta a sua também:`;
   const whatsappUrl = `https://wa.me/?text=${encodeURIComponent(`${shareText} ${shareUrl}`)}`;
 
   const handleCopy = async () => {
@@ -160,41 +174,118 @@ const SuccessCard = ({ brandColor, eventName, name, shareUrl }: { brandColor: st
   };
 
   return (
-    <motion.div key="success" initial={{ opacity: 0, scale: 0.92 }} animate={{ opacity: 1, scale: 1 }} transition={{ type: "spring", stiffness: 120 }} className="w-full max-w-lg mx-auto">
-      <Card className="border-border shadow-2xl overflow-hidden">
-        <div className="h-2" style={{ background: `linear-gradient(90deg, ${brandColor}, ${brandColor}80)` }} />
-        <CardContent className="p-8 text-center">
+    <motion.div
+      key="success"
+      initial={{ opacity: 0, y: 16, scale: 0.98 }}
+      animate={{ opacity: 1, y: 0, scale: 1 }}
+      transition={{ type: "spring", stiffness: 110, damping: 18 }}
+      className="w-full max-w-xl mx-auto"
+    >
+      <Card className="border-border shadow-2xl overflow-hidden rounded-3xl">
+        {/* Hero com a arte do evento */}
+        <div className="relative bg-muted">
+          {flyerUrl ? (
+            <img src={flyerUrl} alt={event.name} className="w-full h-auto block object-contain" />
+          ) : (
+            <div className="aspect-[16/9] flex items-center justify-center" style={{ background: `linear-gradient(135deg, ${brandColor}, ${brandColor}AA)` }}>
+              <h2 className="text-3xl font-display font-bold text-white px-6 text-center">{event.name}</h2>
+            </div>
+          )}
+          {/* Selo de confirmação */}
           <motion.div
-            initial={{ scale: 0, rotate: -20 }}
-            animate={{ scale: 1, rotate: 0 }}
-            transition={{ type: "spring", stiffness: 200, delay: 0.15 }}
-            className="w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-5"
-            style={{ background: `${brandColor}15` }}
+            initial={{ opacity: 0, y: -8, scale: 0.9 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            transition={{ delay: 0.2, type: "spring", stiffness: 200 }}
+            className="absolute top-4 right-4 flex items-center gap-1.5 rounded-full px-3 py-1.5 backdrop-blur-md shadow-lg"
+            style={{ background: "rgba(255,255,255,0.95)", color: brandColor }}
           >
-            <PartyPopper className="w-10 h-10" style={{ color: brandColor }} />
+            <CheckCircle2 className="w-4 h-4" />
+            <span className="text-xs font-semibold uppercase tracking-wide">Confirmada</span>
           </motion.div>
-          <motion.h2 initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }} className="text-3xl font-display font-bold mb-2">
-            🎉 Obrigado{firstName ? `, ${firstName}` : ""}!
-          </motion.h2>
-          <motion.p initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.4 }} className="text-muted-foreground mb-6">
-            Sua presença em <strong className="text-foreground">{eventName}</strong> está garantida.
-          </motion.p>
-          <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.5 }} className="bg-muted/40 rounded-xl p-4 text-left space-y-3">
-            <div className="flex items-start gap-3">
+        </div>
+
+        {/* Faixa fina com cor primária + logo */}
+        <div
+          className="flex items-center justify-center gap-2 px-6 py-3 text-white"
+          style={{ background: brandColor }}
+        >
+          {logoUrl && <img src={logoUrl} alt="" className="h-5 max-h-5 w-auto" />}
+          <span className="text-[11px] font-semibold uppercase tracking-[0.12em] opacity-95">Inscrição confirmada</span>
+        </div>
+
+        <CardContent className="p-6 sm:p-8 space-y-6">
+          {/* Saudação */}
+          <div className="text-center">
+            <motion.h2
+              initial={{ opacity: 0, y: 6 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.3 }}
+              className="text-2xl sm:text-3xl font-display font-bold tracking-tight"
+            >
+              Você está dentro{firstName ? `, ${firstName}` : ""}!
+            </motion.h2>
+            <motion.p
+              initial={{ opacity: 0, y: 6 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.4 }}
+              className="text-muted-foreground mt-2"
+            >
+              Sua presença em <strong className="text-foreground">{event.name}</strong> está garantida.
+            </motion.p>
+          </div>
+
+          {/* Bloco "ingresso" */}
+          <motion.div
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.5 }}
+            className="rounded-2xl border border-dashed border-border bg-muted/30 p-5 space-y-4"
+          >
+            {dt && (
+              <div>
+                <div className="text-[11px] font-semibold uppercase tracking-[0.1em] text-muted-foreground">Quando</div>
+                <div className="mt-1 text-base font-display font-semibold text-foreground">{dt.dateRange}</div>
+                {dt.timeRange && (
+                  <div className="text-sm text-muted-foreground mt-0.5">
+                    {dt.timeRange}{dt.tzLabel ? ` · ${dt.tzLabel}` : ""}
+                  </div>
+                )}
+              </div>
+            )}
+            <div className="border-t border-dashed border-border" />
+            <div>
+              <div className="text-[11px] font-semibold uppercase tracking-[0.1em] text-muted-foreground">Onde</div>
+              <div className="mt-1 text-sm text-foreground">
+                {locationLabel}{event.location_value ? <span className="text-muted-foreground"> · {event.location_value}</span> : null}
+              </div>
+            </div>
+          </motion.div>
+
+          {/* E-mail + QR */}
+          <motion.div
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.6 }}
+            className="grid sm:grid-cols-2 gap-3"
+          >
+            <div className="rounded-xl bg-muted/40 p-4 flex items-start gap-3">
               <Mail className="w-5 h-5 mt-0.5 shrink-0" style={{ color: brandColor }} />
-              <p className="text-sm">
-                Enviamos seu <strong>cartão de presença com QR Code</strong> para o seu e-mail.
-              </p>
+              <p className="text-sm text-foreground leading-snug">Enviamos a confirmação para o seu e-mail.</p>
             </div>
-            <div className="flex items-start gap-3">
+            <div className="rounded-xl bg-muted/40 p-4 flex items-start gap-3">
               <QrCode className="w-5 h-5 mt-0.5 shrink-0" style={{ color: brandColor }} />
-              <p className="text-sm">
-                Apresente o QR Code na entrada para validar sua presença e <strong>concorrer aos brindes</strong> 🎁.
-              </p>
+              <p className="text-sm text-foreground leading-snug">Apresente o QR Code para validar sua presença.</p>
             </div>
           </motion.div>
-          <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.65 }} className="mt-6 space-y-3">
-            <p className="text-xs text-muted-foreground">Convide alguém para vir com você:</p>
+
+          {/* CTAs */}
+          <motion.div
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.7 }}
+            className="space-y-3"
+          >
+            <p className="text-xs text-center text-muted-foreground">Convide alguém para vir com você:</p>
             <div className="flex gap-2">
               <Button asChild variant="outline" className="flex-1 rounded-full h-11">
                 <a href={whatsappUrl} target="_blank" rel="noopener noreferrer">
@@ -202,7 +293,7 @@ const SuccessCard = ({ brandColor, eventName, name, shareUrl }: { brandColor: st
                 </a>
               </Button>
               <Button onClick={handleCopy} variant="outline" className="flex-1 rounded-full h-11">
-                {copied ? <Check className="w-4 h-4 mr-2 text-success" /> : <Copy className="w-4 h-4 mr-2" />}
+                {copied ? <Check className="w-4 h-4 mr-2" /> : <Copy className="w-4 h-4 mr-2" />}
                 {copied ? "Copiado" : "Copiar link"}
               </Button>
             </div>
