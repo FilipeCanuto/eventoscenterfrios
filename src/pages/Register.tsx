@@ -709,8 +709,17 @@ const Register = () => {
   if (submitted) {
     const shareUrl = typeof window !== "undefined" ? `${window.location.origin}/register/${event.slug}` : "";
     return wrapDark(
-      <div className="min-h-screen flex items-center justify-center px-4 py-12 bg-background text-foreground" style={{ background: isDark ? undefined : `linear-gradient(135deg, ${brandColor}15, ${brandColor}05)` }}>
-        <SuccessCard brandColor={brandColor} event={event} name={formData["Nome Completo"] || formData["Nome"] || formData["Name"] || ""} shareUrl={shareUrl} />
+      <div
+        className="min-h-screen bg-background text-foreground relative overflow-hidden"
+        style={{
+          background: isDark
+            ? `radial-gradient(ellipse at top, ${brandColor}25, transparent 60%), hsl(var(--background))`
+            : `radial-gradient(ellipse at top, ${brandColor}22, transparent 55%), linear-gradient(180deg, ${brandColor}08, hsl(var(--background)) 70%)`,
+        }}
+      >
+        <div className="relative min-h-screen flex items-center justify-center px-4 py-16 sm:py-20">
+          <SuccessCard brandColor={brandColor} event={event} name={formData["Nome Completo"] || formData["Nome"] || formData["Name"] || ""} shareUrl={shareUrl} />
+        </div>
       </div>
     );
   }
