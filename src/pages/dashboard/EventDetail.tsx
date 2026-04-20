@@ -9,6 +9,7 @@ import { useEvent, useUpdateEvent, useDeleteEvent } from "@/hooks/useEvents";
 import { useFormFields, useAddFormField, useDeleteFormField } from "@/hooks/useFormFields";
 import { toast } from "sonner";
 import { useState } from "react";
+import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import TemplatePreview from "@/components/TemplatePreview";
 import EventDetailHeader from "@/components/event-detail/EventDetailHeader";
@@ -29,6 +30,7 @@ const EventDetail = () => {
   const deleteField = useDeleteFormField();
   const [newFieldLabel, setNewFieldLabel] = useState("");
   const [newFieldType, setNewFieldType] = useState("text");
+  const [newFieldOptions, setNewFieldOptions] = useState("");
 
   if (isLoading) {
     return <div className="flex items-center justify-center py-20"><Loader2 className="w-6 h-6 animate-spin text-primary" /></div>;
@@ -57,14 +59,24 @@ const EventDetail = () => {
 
   const handleAddField = async () => {
     if (!newFieldLabel.trim()) return;
+    let options: string[] | null = null;
+    if (newFieldType === "select") {
+      options = newFieldOptions.split("\n").map(o => o.trim()).filter(Boolean);
+      if (options.length < 2) {
+        toast.error("Adicione pelo menos 2 opções (uma por linha).");
+        return;
+      }
+    }
     await addField.mutateAsync({
       event_id: event.id,
       label: newFieldLabel,
       field_type: newFieldType,
       required: false,
       position: (formFields?.length ?? 0),
+      ...(options ? { options } as any : {}),
     });
     setNewFieldLabel("");
+    setNewFieldOptions("");
     toast.success("Campo adicionado");
   };
 
