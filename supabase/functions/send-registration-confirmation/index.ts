@@ -41,6 +41,7 @@ const REPLY_TO_ADDRESS = "contato@eventos.centerfrios.com";
 const UNSUBSCRIBE_MAILTO = "contato@eventos.centerfrios.com";
 
 interface EmailContext {
+  registrationId: string;
   recipientEmail: string;
   recipientName: string;
   eventName: string;
