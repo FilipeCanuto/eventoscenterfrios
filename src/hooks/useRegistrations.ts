@@ -96,6 +96,42 @@ export function useCreateRegistration() {
   });
 }
 
+export function useCancelRegistration() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase
+        .from("registrations")
+        .update({ status: "cancelled" })
+        .eq("id", id);
+      if (error) throw error;
+      return id;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["registrations"] });
+      qc.invalidateQueries({ queryKey: ["registration-stats"] });
+    },
+  });
+}
+
+export function useCheckInRegistration() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase
+        .from("registrations")
+        .update({ status: "checked_in" })
+        .eq("id", id);
+      if (error) throw error;
+      return id;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["registrations"] });
+      qc.invalidateQueries({ queryKey: ["registration-stats"] });
+    },
+  });
+}
+
 export function useRegistrationStats() {
   return useQuery({
     queryKey: ["registration-stats"],
