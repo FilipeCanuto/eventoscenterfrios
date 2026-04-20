@@ -1,52 +1,94 @@
 
+
 ## Objetivo
 
-Refinar a página "Obrigado" (`SuccessCard` em `src/pages/Register.tsx`):
-1. **Remover** o banner/flyer do evento do topo do card.
-2. **Aplicar o tema do evento** à página inteira (cor primária, color_mode, tipografia) — não só ao card.
-3. **Dar muito mais destaque** à mensagem de confirmação ("Inscrição confirmada") e à mensagem principal.
+1. Adicionar botão **"Remover inscrição"** (cancela / exclui) tanto na página global de **Participantes** quanto na tabela de participantes dentro de cada **evento**.
+2. Enriquecer as informações exibidas sobre **participantes** e **leads** para dar mais contexto ao organizador.
 
-## Mudanças
+> Observação: a tela "Configurações" (`/dashboard/settings`) trata de perfil/aparência/equipe — não tem inscrições. Vou aplicar a remoção de inscrição na **tela de Participantes** (`/dashboard/attendees`) e na **aba Participantes do evento** (que é onde o organizador "configura" cada inscrição). Se você quis dizer outra tela, me diga.
 
-### 1. Remover o hero da flyer
-- Tirar o bloco `<img src={background_image_url}>` do topo do `SuccessCard`.
-- Remover também o overlay com logo sobreposto.
+---
 
-### 2. Aplicar o tema à página toda
-Hoje só o card tem cor de marca; o fundo da página é neutro. Vou:
-- Envolver toda a tela de sucesso num container que respeita `event.color_mode` (claro/escuro) e usa `primary_color` como acento.
-- Fundo da página: gradiente sutil derivado da `primary_color` (ex: `linear-gradient(180deg, primary/8%, background)`) — mesma lógica visual da página de inscrição, para continuidade.
-- Logo do evento (se houver) reposicionado no topo da página, acima do card, em tamanho médio — substitui a função visual do banner sem ser pesado.
-- Tipografia: Bricolage Grotesque já em uso, manter.
+## 1. Remover inscrição
 
-### 3. Hierarquia da confirmação (muito mais evidência)
-Reorganizar o card em três blocos verticais bem espaçados:
+### Backend
+- Hoje a RLS da tabela `registrations` permite `UPDATE` mas **não** `DELETE` para o dono do evento.
+- Decisão: usar **soft-delete** mudando `status` para `'cancelled'` (a RLS de UPDATE já cobre isso, e mantém histórico para métricas/leads). Sem nova migration necessária.
+- Novo hook `useCancelRegistration` em `src/hooks/useRegistrations.ts`:
+  - `UPDATE registrations SET status='cancelled' WHERE id=...`
+  - Invalida `["registrations"]` e `["registrations", eventId]`.
 
-**Bloco 1 — Selo + título (ENORME):**
-- Selo circular grande (80–96px) com check, usando `primary_color` de fundo.
-- Título principal: **"Inscrição confirmada"** em `text-4xl md:text-6xl`, font-bold, tracking apertado. Esta é A mensagem.
-- Subtítulo logo abaixo, mais suave: "Você está garantido(a) no [nome do evento]".
+### UI
+- **AlertDialog de confirmação** ("Tem certeza? Esta ação cancela a inscrição e libera a vaga.") antes de executar.
+- Botão "Cancelar inscrição" (variant destructive, ícone `Trash2`):
+  - **`src/pages/dashboard/Attendees.tsx`** → dentro do `Dialog` de detalhes do participante, no rodapé.
+  - **`src/components/event-detail/EventAttendeesTable.tsx`** → nova coluna de ações com botão ícone (Trash2) por linha + dialog de confirmação.
+- Inscrições com status `cancelled` ficam visíveis com o badge vermelho já existente; adicionar filtro rápido "Ocultar canceladas" (toggle, padrão **ligado**) em ambas as tabelas.
+- Toast de sucesso/erro via `sonner`.
 
-**Bloco 2 — Mensagem principal em destaque:**
-- Card/bloco interno com a mensagem personalizada (ou padrão "Enviamos os detalhes para seu e-mail. Salve a data!"), em `text-lg md:text-xl`, com bom respiro (py-6).
-- Linha divisória sutil com a cor primária.
+---
 
-**Bloco 3 — Detalhes do evento (ticket-style mantido, mas secundário):**
-- Data/hora + local em formato compacto, labels uppercase pequenas, valores em peso médio.
-- Visualmente menor que o título — função de referência, não de destaque.
+## 2. Mais informações sobre participantes
 
-**Bloco 4 — CTAs:**
-- WhatsApp + copiar link, mantidos como pills, alinhados horizontalmente em desktop e empilhados em mobile.
+### Na página global `/dashboard/attendees`
+**Novas colunas / dados (visíveis em desktop, ocultos em mobile conforme breakpoint):**
+- **WhatsApp** (`lead_whatsapp`) — coluna nova.
+- **Origem** — UTM source / referrer / "direto" (mesma lógica de `getSource` já usada por evento).
+- **Hora** junto com a data (`HH:mm`).
 
-### 4. Confetti
-- Mantido, com a cor primária do evento.
+**Novos cards de métricas no topo (substituem os 3 atuais):**
+- Total de inscrições
+- Check-ins realizados (com % do total)
+- Cancelamentos (com %)
+- Inscrições nos últimos 7 dias
+- Taxa média de conversão (se houver page-views)
+
+**Dialog de detalhes do participante — enriquecido:**
+- Seção "Contato" (nome, e-mail, whatsapp clicável `https://wa.me/...`).
+- Seção "Origem" (utm_source, utm_medium, utm_campaign, referrer, device_type, landing_page) lendo de `tracking` + fallback `data.__utm_*`.
+- Seção "Linha do tempo": criado em, último update, link para página pública do evento.
+- Botão **"Cancelar inscrição"** (destrutivo) e botão **"Marcar check-in"** (se ainda `registered`).
+
+### Na aba do evento (`EventAttendeesTable`)
+- Coluna **WhatsApp** (já mostrada em export, agora em tela em md+).
+- Coluna **Origem** já existe — mantida.
+- Hora junto com a data.
+- Click na linha abre o mesmo Dialog de detalhes (extraído para componente compartilhado `RegistrationDetailDialog`).
+- Coluna de **Ações** com Trash2 (cancelar) e CheckCircle (check-in).
+
+---
+
+## 3. Mais informações sobre leads (não convertidos)
+
+A tabela de leads vive em `EventLeadsTable.tsx` (aba "Leads" do evento). Hoje mostra: data, status, nome parcial, e-mail parcial, whatsapp parcial, origem.
+
+**Adições:**
+- Coluna **Device** (mobile/tablet/desktop) com ícone.
+- Coluna **Tempo no form** (diferença entre `form_started_at` e `form_abandoned_at` quando ambos existem) — sinaliza interesse real.
+- **Tooltip ou hover-card** em cada linha com: `landing_url`, `referrer` completo, `utm_term`, `utm_content`, primeira/última atividade.
+- Adicionar nova métrica no topo: **"Leads quentes"** = abandonaram com e-mail capturado (acionáveis para follow-up).
+- Botão por linha **"Copiar contato"** que copia `nome | email | whatsapp` para a área de transferência (facilita follow-up manual).
+- Filtro adicional "Só com WhatsApp" (junto com "Só com e-mail" e "Só abandonos").
+
+---
 
 ## Arquivos alterados
 
-- `src/pages/Register.tsx` — apenas o componente `SuccessCard` e o wrapper de página de sucesso. Sem mudanças em tracking, e-mail ou banco.
+- `src/hooks/useRegistrations.ts` — `useCancelRegistration`, `useCheckInRegistration`.
+- `src/pages/dashboard/Attendees.tsx` — colunas extras, métricas extras, dialog enriquecido com ações.
+- `src/components/event-detail/EventAttendeesTable.tsx` — colunas extras, ações de linha, integração com dialog compartilhado.
+- `src/components/event-detail/EventLeadsTable.tsx` — colunas device/tempo, hover-card, métrica "leads quentes", filtro WhatsApp, botão copiar.
+- **Novo** `src/components/dashboard/RegistrationDetailDialog.tsx` — componente compartilhado do dialog de detalhes (reaproveitado nas duas telas).
+
+Sem migrations de banco. Sem mudanças em e-mail/edge functions.
+
+---
 
 ## Validação
 
-1. Concluir uma inscrição → ver a nova página com tema do evento aplicado, sem banner, com "Inscrição confirmada" gigante no topo.
-2. Testar em mobile e desktop.
-3. Testar com evento de `color_mode: dark` para garantir que o tema escuro funciona.
+1. Em `/dashboard/attendees`: abrir um participante, clicar "Cancelar inscrição", confirmar → linha aparece como "Cancelado" (ou some se filtro ativo). Refresh persiste.
+2. Em uma página de evento → aba Participantes: cancelar via ícone Trash2 da linha → mesmo comportamento.
+3. Conferir novas colunas (WhatsApp, Origem, Hora) e novas métricas.
+4. Em uma página de evento → aba Leads: conferir colunas Device e Tempo no form, hover-card com detalhes, métrica "Leads quentes", botão "Copiar contato".
+5. Testar em mobile (colunas extras escondidas, ações continuam acessíveis pelo dialog).
+
