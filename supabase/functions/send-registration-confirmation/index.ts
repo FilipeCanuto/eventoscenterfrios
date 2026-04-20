@@ -165,7 +165,19 @@ function buildHtml(p: EmailContext, origin: string) {
             <tr><td style="font-size:12px;text-transform:uppercase;letter-spacing:.06em;color:#6b7280;padding-bottom:6px">${locationLabel}</td></tr>
             <tr><td style="font-size:15px;color:#111;line-height:1.5">${locationBlock}</td></tr>
           </table>
-          <div style="text-align:center;margin:24px 0 8px">
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#ffffff;border:1px solid #eef0f3;border-radius:14px;padding:20px;margin:0 0 8px">
+            <tr><td style="text-align:center;font-size:12px;text-transform:uppercase;letter-spacing:.06em;color:#6b7280;padding-bottom:10px">Seu ingresso digital</td></tr>
+            <tr><td style="text-align:center;padding-bottom:10px">
+              <a href="${checkInUrl}" style="display:inline-block;text-decoration:none">
+                <img src="${qrSrc}" alt="QR Code de check-in" width="220" height="220" style="display:block;width:220px;height:220px;border:0"/>
+              </a>
+            </td></tr>
+            <tr><td style="text-align:center;font-size:13px;color:#6b7280;line-height:1.5">
+              Apresente este QR Code na entrada do evento.<br/>
+              <a href="${checkInUrl}" style="color:${brand};text-decoration:none;font-weight:600">Ou clique aqui para fazer check-in</a>
+            </td></tr>
+          </table>
+          <div style="text-align:center;margin:20px 0 8px">
             <a href="${eventUrl}" style="display:inline-block;background:${brand};color:#fff;text-decoration:none;font-weight:600;padding:14px 26px;border-radius:999px;font-size:15px">Ver página do evento</a>
           </div>
           <p style="margin:20px 0 0;font-size:13px;color:#6b7280;line-height:1.55">
