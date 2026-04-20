@@ -345,7 +345,7 @@ const EventInfo = ({ event, className = "" }: { event: Event; className?: string
           )}
         </div>
       )}
-      <h1 className="text-2xl sm:text-4xl font-display font-extrabold md:text-6xl whitespace-pre-line">{event.name}</h1>
+      <h1 className="text-2xl sm:text-4xl font-display font-extrabold whitespace-pre-line md:text-8xl">{event.name}</h1>
       {description && (
         <div className="mt-4 mb-4">
           <p className="text-muted-foreground text-sm leading-relaxed">
@@ -398,8 +398,8 @@ const RegistrationForm = ({
   <form onSubmit={onSubmit} className={`space-y-4 ${className}`}>
     {urgencyText && (
       <div
-        className="flex items-center gap-2 rounded-full px-3 py-2 text-xs font-medium"
-        style={{ background: `${brandColor}12`, color: brandColor }}
+      className="flex items-center gap-2 rounded-full px-3 py-2 text-xs font-medium border-secondary-foreground bg-blue-200"
+      style={{ color: brandColor }}
       >
         <Clock className="w-3.5 h-3.5 shrink-0" />
         <span>{urgencyText}</span>
