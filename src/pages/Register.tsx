@@ -372,6 +372,7 @@ const RegistrationForm = ({
   formFields,
   formData,
   onFieldChange,
+  onFieldBlur,
   consent,
   onConsentChange,
   onSubmit,
@@ -383,6 +384,7 @@ const RegistrationForm = ({
   formFields: FormField[] | undefined;
   formData: Record<string, string>;
   onFieldChange: (label: string, value: string) => void;
+  onFieldBlur?: (label: string, value: string) => void;
   consent: boolean;
   onConsentChange: (v: boolean) => void;
   onSubmit: (e: React.FormEvent) => void;
@@ -415,6 +417,7 @@ const RegistrationForm = ({
             required={field.required}
             value={value}
             onChange={e => onFieldChange(field.label, isPhone ? maskBRPhone(e.target.value) : e.target.value)}
+            onBlur={e => onFieldBlur?.(field.label, e.target.value)}
             aria-invalid={phoneInvalid || undefined}
             className="h-12 text-base"
             style={{ fontSize: "16px" }}
@@ -626,6 +629,10 @@ const Register = () => {
     try {
       const utms = utmsRef.current || {};
       const registrationId = (await createReg.mutateAsync({ event_id: event.id, data: formData, tracking: utms })) as unknown as string;
+      // Marca conversão na visita rastreada
+      if (registrationId) {
+        trackPageView(event.id, { converted_registration_id: registrationId });
+      }
       // Analytics-ready event (Meta Pixel / GA4 / GTM can hook into this)
       try {
         (window as any).dataLayer = (window as any).dataLayer || [];
@@ -681,6 +688,7 @@ const Register = () => {
     formFields,
     formData,
     onFieldChange: handleFieldChange,
+    onFieldBlur: handleFieldBlur,
     consent,
     onConsentChange: setConsent,
     onSubmit: handleSubmit,
