@@ -2,93 +2,55 @@
 
 ## Objetivo
 
-1. Adicionar botão **"Remover inscrição"** (cancela / exclui) tanto na página global de **Participantes** quanto na tabela de participantes dentro de cada **evento**.
-2. Enriquecer as informações exibidas sobre **participantes** e **leads** para dar mais contexto ao organizador.
+Adicionar um campo **obrigatório** ao formulário de inscrição perguntando o **segmento de atuação** do lead (Supermercado, Açougue, Horti-Fruti, Lanchonete, Restaurante, Pizzaria, Laticínio, Outros). Isso qualifica os leads e habilita remarketing segmentado.
 
-> Observação: a tela "Configurações" (`/dashboard/settings`) trata de perfil/aparência/equipe — não tem inscrições. Vou aplicar a remoção de inscrição na **tela de Participantes** (`/dashboard/attendees`) e na **aba Participantes do evento** (que é onde o organizador "configura" cada inscrição). Se você quis dizer outra tela, me diga.
+## O que eu acho da configuração proposta
 
----
+Ótima ideia para qualificação — segmento é o filtro nº 1 para remarketing B2B em food service. Algumas observações:
 
-## 1. Remover inscrição
+1. **Formato "acordeon" vs. "dropdown":** acordeon costuma ser usado quando o conteúdo é longo e expansível. Para escolher 1 entre 8 opções, o padrão de UX/mobile é um **dropdown (select)** ou **chips/radio**. Vou implementar como **dropdown estilizado** (componente `Select` do shadcn, já no padrão pill da marca), que é mais rápido e ocupa menos espaço no formulário. Se preferir mesmo um acordeon visual com as opções dentro, me diga.
+2. **"Outros"** — vou incluir, mas sem campo livre de texto adicional (mantém o formulário curto). Se quiser, posso adicionar um input "Qual?" condicional depois.
+3. **Obrigatório:** sim, marcado como `required`.
+4. **Escopo:** vou aplicar **apenas ao evento atual** ("Circuito Experience: Centerfrios & Skymsen"). Se quiser que vire padrão para todos os novos eventos, é uma segunda mudança que faço depois.
 
-### Backend
-- Hoje a RLS da tabela `registrations` permite `UPDATE` mas **não** `DELETE` para o dono do evento.
-- Decisão: usar **soft-delete** mudando `status` para `'cancelled'` (a RLS de UPDATE já cobre isso, e mantém histórico para métricas/leads). Sem nova migration necessária.
-- Novo hook `useCancelRegistration` em `src/hooks/useRegistrations.ts`:
-  - `UPDATE registrations SET status='cancelled' WHERE id=...`
-  - Invalida `["registrations"]` e `["registrations", eventId]`.
+## Mudanças
 
-### UI
-- **AlertDialog de confirmação** ("Tem certeza? Esta ação cancela a inscrição e libera a vaga.") antes de executar.
-- Botão "Cancelar inscrição" (variant destructive, ícone `Trash2`):
-  - **`src/pages/dashboard/Attendees.tsx`** → dentro do `Dialog` de detalhes do participante, no rodapé.
-  - **`src/components/event-detail/EventAttendeesTable.tsx`** → nova coluna de ações com botão ícone (Trash2) por linha + dialog de confirmação.
-- Inscrições com status `cancelled` ficam visíveis com o badge vermelho já existente; adicionar filtro rápido "Ocultar canceladas" (toggle, padrão **ligado**) em ambas as tabelas.
-- Toast de sucesso/erro via `sonner`.
+### 1. Banco de dados
+- Nova migration adicionando coluna `options jsonb` em `form_fields` (nullable, default `null`) — guarda o array de opções para campos do tipo `select`.
+- Insert de um novo registro em `form_fields` para o evento `cfd9d79d-78d3-45d8-bdc7-1250314ec2c4`:
+  - `label`: "Segmento de atuação"
+  - `field_type`: `"select"`
+  - `required`: `true`
+  - `position`: `3` (entre WhatsApp e Empresa)
+  - `options`: `["Supermercado","Açougue","Horti-Fruti","Lanchonete","Restaurante","Pizzaria","Laticínio","Outros"]`
 
----
+### 2. Renderização do formulário (`src/pages/Register.tsx`)
+- No `formFields.map`, quando `field.field_type === "select"`, renderizar um componente `Select` (shadcn) no lugar do `Input`, populando com `field.options`.
+- Estilo casa com o resto: `h-12`, `rounded-xl`, label igual aos outros campos, mensagem de obrigatoriedade.
+- Validação: se `required` e valor vazio → toast "Selecione seu segmento de atuação".
 
-## 2. Mais informações sobre participantes
+### 3. Wizard de criação de evento (`src/pages/dashboard/CreateEvent.tsx` + `EventDetail.tsx`)
+- Adicionar `"select"` como opção no seletor de tipo de campo (ao adicionar campo customizado).
+- Quando `select` é escolhido, mostrar um textarea simples "Opções (uma por linha)" para o organizador preencher.
+- Salvar `options` como array.
+- Não mexer nos `defaultFields` por enquanto (escopo só do evento atual).
 
-### Na página global `/dashboard/attendees`
-**Novas colunas / dados (visíveis em desktop, ocultos em mobile conforme breakpoint):**
-- **WhatsApp** (`lead_whatsapp`) — coluna nova.
-- **Origem** — UTM source / referrer / "direto" (mesma lógica de `getSource` já usada por evento).
-- **Hora** junto com a data (`HH:mm`).
-
-**Novos cards de métricas no topo (substituem os 3 atuais):**
-- Total de inscrições
-- Check-ins realizados (com % do total)
-- Cancelamentos (com %)
-- Inscrições nos últimos 7 dias
-- Taxa média de conversão (se houver page-views)
-
-**Dialog de detalhes do participante — enriquecido:**
-- Seção "Contato" (nome, e-mail, whatsapp clicável `https://wa.me/...`).
-- Seção "Origem" (utm_source, utm_medium, utm_campaign, referrer, device_type, landing_page) lendo de `tracking` + fallback `data.__utm_*`.
-- Seção "Linha do tempo": criado em, último update, link para página pública do evento.
-- Botão **"Cancelar inscrição"** (destrutivo) e botão **"Marcar check-in"** (se ainda `registered`).
-
-### Na aba do evento (`EventAttendeesTable`)
-- Coluna **WhatsApp** (já mostrada em export, agora em tela em md+).
-- Coluna **Origem** já existe — mantida.
-- Hora junto com a data.
-- Click na linha abre o mesmo Dialog de detalhes (extraído para componente compartilhado `RegistrationDetailDialog`).
-- Coluna de **Ações** com Trash2 (cancelar) e CheckCircle (check-in).
-
----
-
-## 3. Mais informações sobre leads (não convertidos)
-
-A tabela de leads vive em `EventLeadsTable.tsx` (aba "Leads" do evento). Hoje mostra: data, status, nome parcial, e-mail parcial, whatsapp parcial, origem.
-
-**Adições:**
-- Coluna **Device** (mobile/tablet/desktop) com ícone.
-- Coluna **Tempo no form** (diferença entre `form_started_at` e `form_abandoned_at` quando ambos existem) — sinaliza interesse real.
-- **Tooltip ou hover-card** em cada linha com: `landing_url`, `referrer` completo, `utm_term`, `utm_content`, primeira/última atividade.
-- Adicionar nova métrica no topo: **"Leads quentes"** = abandonaram com e-mail capturado (acionáveis para follow-up).
-- Botão por linha **"Copiar contato"** que copia `nome | email | whatsapp` para a área de transferência (facilita follow-up manual).
-- Filtro adicional "Só com WhatsApp" (junto com "Só com e-mail" e "Só abandonos").
-
----
+### 4. Exibição em participantes/leads
+- O valor escolhido vai automaticamente para `registrations.data["Segmento de atuação"]` e aparece no diálogo de detalhes do participante (já renderiza `data` genericamente). Sem mudança extra.
 
 ## Arquivos alterados
 
-- `src/hooks/useRegistrations.ts` — `useCancelRegistration`, `useCheckInRegistration`.
-- `src/pages/dashboard/Attendees.tsx` — colunas extras, métricas extras, dialog enriquecido com ações.
-- `src/components/event-detail/EventAttendeesTable.tsx` — colunas extras, ações de linha, integração com dialog compartilhado.
-- `src/components/event-detail/EventLeadsTable.tsx` — colunas device/tempo, hover-card, métrica "leads quentes", filtro WhatsApp, botão copiar.
-- **Novo** `src/components/dashboard/RegistrationDetailDialog.tsx` — componente compartilhado do dialog de detalhes (reaproveitado nas duas telas).
-
-Sem migrations de banco. Sem mudanças em e-mail/edge functions.
-
----
+- **Nova migration:** adiciona `options` em `form_fields` + insere o campo no evento.
+- `src/pages/Register.tsx` — render condicional de `select`.
+- `src/pages/dashboard/CreateEvent.tsx` — opção "select" + editor de opções.
+- `src/pages/dashboard/EventDetail.tsx` — opção "select" + editor de opções no editor inline.
+- `src/components/ui/select.tsx` — já existe, sem mudanças.
 
 ## Validação
 
-1. Em `/dashboard/attendees`: abrir um participante, clicar "Cancelar inscrição", confirmar → linha aparece como "Cancelado" (ou some se filtro ativo). Refresh persiste.
-2. Em uma página de evento → aba Participantes: cancelar via ícone Trash2 da linha → mesmo comportamento.
-3. Conferir novas colunas (WhatsApp, Origem, Hora) e novas métricas.
-4. Em uma página de evento → aba Leads: conferir colunas Device e Tempo no form, hover-card com detalhes, métrica "Leads quentes", botão "Copiar contato".
-5. Testar em mobile (colunas extras escondidas, ações continuam acessíveis pelo dialog).
+1. Abrir a página pública do evento → ver "Segmento de atuação *" com dropdown das 8 opções.
+2. Tentar enviar sem escolher → erro de validação.
+3. Concluir inscrição → ver o segmento no diálogo de detalhes do participante em `/dashboard/attendees` e na aba Participantes do evento.
+4. Exportar CSV → coluna "Segmento de atuação" presente.
+5. Testar em mobile (dropdown nativo amigável).
 
