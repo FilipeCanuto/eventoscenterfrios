@@ -345,7 +345,7 @@ const EventInfo = ({ event, className = "" }: { event: Event; className?: string
           )}
         </div>
       )}
-      <h1 className="text-2xl sm:text-4xl md:text-7xl font-display font-bold">{event.name}</h1>
+      <h1 className="text-2xl sm:text-4xl font-display md:text-6xl font-extrabold">{event.name}</h1>
       {description && (
         <div className="mt-4 mb-4">
           <p className="text-muted-foreground text-sm leading-relaxed">
@@ -438,8 +438,7 @@ const RegistrationForm = ({
     </div>
     <Button
       type="submit"
-      className="w-full h-12 text-base font-semibold border-0 text-white rounded-full shadow-lg"
-      style={{ background: `linear-gradient(135deg, ${brandColor}, ${brandColor}CC)` }}
+      className="w-full h-12 text-base font-semibold border-0 text-white rounded-full shadow-lg bg-primary"
       disabled={isPending}
     >
       {isPending ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Inscrevendo…</> : "Garantir minha vaga"}
