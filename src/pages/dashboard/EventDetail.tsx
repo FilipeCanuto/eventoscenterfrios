@@ -16,6 +16,7 @@ import EventQuickInfo from "@/components/event-detail/EventQuickInfo";
 import EventAttendeesTable from "@/components/event-detail/EventAttendeesTable";
 import EventQRCode from "@/components/event-detail/EventQRCode";
 import RegistrationLinkBlock from "@/components/event-detail/RegistrationLinkBlock";
+import EventLeadsTable from "@/components/event-detail/EventLeadsTable";
 
 const EventDetail = () => {
   const { id } = useParams();
@@ -77,6 +78,7 @@ const EventDetail = () => {
         <TabsList className="bg-muted rounded-full p-1 w-full sm:w-auto">
           <TabsTrigger value="branding" className="flex-1 sm:flex-initial rounded-full data-[state=active]:bg-card data-[state=active]:shadow-sm">Identidade visual</TabsTrigger>
           <TabsTrigger value="form" className="flex-1 sm:flex-initial rounded-full data-[state=active]:bg-card data-[state=active]:shadow-sm">Formulário</TabsTrigger>
+          <TabsTrigger value="leads" className="flex-1 sm:flex-initial rounded-full data-[state=active]:bg-card data-[state=active]:shadow-sm">Leads</TabsTrigger>
           <TabsTrigger value="settings" className="flex-1 sm:flex-initial rounded-full data-[state=active]:bg-card data-[state=active]:shadow-sm">Configurações</TabsTrigger>
         </TabsList>
 
@@ -193,6 +195,10 @@ const EventDetail = () => {
               </div>
             </div>
           </div>
+        </TabsContent>
+
+        <TabsContent value="leads" className="mt-5">
+          <EventLeadsTable eventId={event.id} />
         </TabsContent>
 
         <TabsContent value="settings" className="mt-5">

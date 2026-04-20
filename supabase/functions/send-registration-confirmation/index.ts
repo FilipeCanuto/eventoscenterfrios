@@ -52,6 +52,7 @@ interface EmailContext {
   eventSlug: string;
   primaryColor: string | null;
   logoUrl: string | null;
+  flyerUrl: string | null;
 }
 
 function buildPlainText(p: EmailContext, origin: string) {
@@ -119,6 +120,22 @@ function buildHtml(p: EmailContext, origin: string) {
     ? `<img src="${escapeHtml(p.logoUrl)}" alt="" height="40" style="display:block;margin:0 auto 12px;max-height:40px"/>`
     : "";
 
+  // Hero com a flyer do evento (se existir) — full width, sem cortar
+  const heroBlock = p.flyerUrl
+    ? `<tr><td style="background:#0f0f10;padding:0;text-align:center;line-height:0">
+          <img src="${escapeHtml(p.flyerUrl)}" alt="${escapeHtml(p.eventName)}" width="560" style="display:block;width:100%;max-width:560px;height:auto;margin:0 auto"/>
+        </td></tr>
+        <tr><td style="background:${brand};padding:14px 24px;text-align:center;color:#fff">
+          ${logoBlock ? `<div style="margin-bottom:8px">${logoBlock}</div>` : ""}
+          <div style="font-size:12px;letter-spacing:.1em;text-transform:uppercase;opacity:.95;font-weight:600">Inscrição confirmada</div>
+          <div style="font-size:20px;font-weight:700;margin-top:4px;line-height:1.25">${escapeHtml(p.eventName)}</div>
+        </td></tr>`
+    : `<tr><td style="background:${brand};padding:28px 24px;text-align:center;color:#fff">
+          ${logoBlock}
+          <div style="font-size:13px;letter-spacing:.08em;text-transform:uppercase;opacity:.9">Inscrição confirmada</div>
+          <div style="font-size:22px;font-weight:700;margin-top:6px;line-height:1.25">${escapeHtml(p.eventName)}</div>
+        </td></tr>`;
+
   return `<!doctype html>
 <html lang="pt-BR"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/><title>Inscrição confirmada</title></head>
 <body style="margin:0;padding:0;background:#f6f6f7;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#111">
@@ -126,11 +143,7 @@ function buildHtml(p: EmailContext, origin: string) {
   <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f6f6f7;padding:32px 16px">
     <tr><td align="center">
       <table role="presentation" width="560" cellpadding="0" cellspacing="0" style="max-width:560px;width:100%;background:#ffffff;border-radius:20px;overflow:hidden;box-shadow:0 1px 2px rgba(0,0,0,0.04)">
-        <tr><td style="background:${brand};padding:28px 24px;text-align:center;color:#fff">
-          ${logoBlock}
-          <div style="font-size:13px;letter-spacing:.08em;text-transform:uppercase;opacity:.9">Inscrição confirmada</div>
-          <div style="font-size:22px;font-weight:700;margin-top:6px;line-height:1.25">${escapeHtml(p.eventName)}</div>
-        </td></tr>
+        ${heroBlock}
         <tr><td style="padding:28px 28px 8px">
           <p style="margin:0 0 12px;font-size:16px">${greeting}</p>
           <p style="margin:0 0 20px;font-size:15px;line-height:1.55;color:#444">
@@ -196,7 +209,7 @@ serve(async (req) => {
       .select(`
         id, status, lead_email, lead_name, tracking,
         events ( id, name, event_date, event_end_date, timezone,
-                 location_type, location_value, slug, primary_color, logo_url )
+                 location_type, location_value, slug, primary_color, logo_url, background_image_url )
       `)
       .eq("id", body.registrationId)
       .maybeSingle();
@@ -255,6 +268,7 @@ serve(async (req) => {
       eventSlug: ev.slug,
       primaryColor: ev.primary_color,
       logoUrl: ev.logo_url,
+      flyerUrl: ev.background_image_url,
     };
 
     const origin =

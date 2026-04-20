@@ -49,6 +49,86 @@ export type Database = {
           },
         ]
       }
+      event_page_views: {
+        Row: {
+          converted_registration_id: string | null
+          created_at: string
+          device_type: string | null
+          event_id: string
+          form_abandoned_at: string | null
+          form_started_at: string | null
+          id: string
+          landing_url: string | null
+          partial_email: string | null
+          partial_name: string | null
+          partial_whatsapp: string | null
+          referrer: string | null
+          session_id: string
+          updated_at: string
+          user_agent: string | null
+          utm_campaign: string | null
+          utm_content: string | null
+          utm_medium: string | null
+          utm_source: string | null
+          utm_term: string | null
+          visitor_id: string
+        }
+        Insert: {
+          converted_registration_id?: string | null
+          created_at?: string
+          device_type?: string | null
+          event_id: string
+          form_abandoned_at?: string | null
+          form_started_at?: string | null
+          id?: string
+          landing_url?: string | null
+          partial_email?: string | null
+          partial_name?: string | null
+          partial_whatsapp?: string | null
+          referrer?: string | null
+          session_id: string
+          updated_at?: string
+          user_agent?: string | null
+          utm_campaign?: string | null
+          utm_content?: string | null
+          utm_medium?: string | null
+          utm_source?: string | null
+          utm_term?: string | null
+          visitor_id: string
+        }
+        Update: {
+          converted_registration_id?: string | null
+          created_at?: string
+          device_type?: string | null
+          event_id?: string
+          form_abandoned_at?: string | null
+          form_started_at?: string | null
+          id?: string
+          landing_url?: string | null
+          partial_email?: string | null
+          partial_name?: string | null
+          partial_whatsapp?: string | null
+          referrer?: string | null
+          session_id?: string
+          updated_at?: string
+          user_agent?: string | null
+          utm_campaign?: string | null
+          utm_content?: string | null
+          utm_medium?: string | null
+          utm_source?: string | null
+          utm_term?: string | null
+          visitor_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "event_page_views_event_id_fkey"
+            columns: ["event_id"]
+            isOneToOne: false
+            referencedRelation: "events"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       events: {
         Row: {
           background_image_url: string | null
@@ -361,6 +441,15 @@ export type Database = {
             Args: { p_data: Json; p_event_id: string; p_tracking?: Json }
             Returns: string
           }
+      track_page_view: {
+        Args: {
+          p_data?: Json
+          p_event_id: string
+          p_session_id: string
+          p_visitor_id: string
+        }
+        Returns: string
+      }
     }
     Enums: {
       app_role: "admin" | "editor" | "viewer"
