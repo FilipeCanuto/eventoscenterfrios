@@ -130,17 +130,8 @@ function buildHtml(p: EmailContext, origin: string) {
     ? `<img src="${escapeHtml(p.logoUrl)}" alt="" height="40" style="display:block;margin:0 auto 12px;max-height:40px"/>`
     : "";
 
-  // Hero com a flyer do evento (se existir) — full width, sem cortar
-  const heroBlock = p.flyerUrl
-    ? `<tr><td style="background:#0f0f10;padding:0;text-align:center;line-height:0">
-          <img src="${escapeHtml(p.flyerUrl)}" alt="${escapeHtml(p.eventName)}" width="560" style="display:block;width:100%;max-width:560px;height:auto;margin:0 auto"/>
-        </td></tr>
-        <tr><td style="background:${brand};padding:14px 24px;text-align:center;color:#fff">
-          ${logoBlock ? `<div style="margin-bottom:8px">${logoBlock}</div>` : ""}
-          <div style="font-size:12px;letter-spacing:.1em;text-transform:uppercase;opacity:.95;font-weight:600">Inscrição confirmada</div>
-          <div style="font-size:20px;font-weight:700;margin-top:4px;line-height:1.25">${escapeHtml(p.eventName)}</div>
-        </td></tr>`
-    : `<tr><td style="background:${brand};padding:28px 24px;text-align:center;color:#fff">
+  // Cabeçalho compacto (sem banner do evento)
+  const heroBlock = `<tr><td style="background:${brand};padding:28px 24px;text-align:center;color:#fff">
           ${logoBlock}
           <div style="font-size:13px;letter-spacing:.08em;text-transform:uppercase;opacity:.9">Inscrição confirmada</div>
           <div style="font-size:22px;font-weight:700;margin-top:6px;line-height:1.25">${escapeHtml(p.eventName)}</div>
@@ -186,7 +177,7 @@ function buildHtml(p: EmailContext, origin: string) {
         </td></tr>
         <tr><td style="padding:24px 28px 28px;text-align:center;color:#9ca3af;font-size:12px">
           Você está recebendo este e-mail porque se inscreveu em <strong style="color:#6b7280">${escapeHtml(p.eventName)}</strong>.<br/>
-          <span style="opacity:.8">powered by meuevento</span>
+          <span style="opacity:.8">powered by CENTERFRIOS</span>
         </td></tr>
       </table>
     </td></tr>
