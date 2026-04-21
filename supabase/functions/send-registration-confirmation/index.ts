@@ -177,7 +177,7 @@ function buildHtml(p: EmailContext, origin: string) {
         </td></tr>
         <tr><td style="padding:24px 28px 28px;text-align:center;color:#9ca3af;font-size:12px">
           Você está recebendo este e-mail porque se inscreveu em <strong style="color:#6b7280">${escapeHtml(p.eventName)}</strong>.<br/>
-          <span style="opacity:.8">powered by meuevento</span>
+          <span style="opacity:.8">powered by CENTERFRIOS</span>
         </td></tr>
       </table>
     </td></tr>
