@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, lazy, Suspense } from "react";
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -9,20 +9,23 @@ import { AuthProvider } from "@/contexts/AuthContext";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 
+// Eager-load the landing page (most common entry point) for fast FCP/LCP
 import Landing from "./pages/Landing";
-import Auth from "./pages/Auth";
-import Register from "./pages/Register";
-import CompanyPage from "./pages/CompanyPage";
-import PublicEvents from "./pages/PublicEvents";
-import CheckIn from "./pages/CheckIn";
-import Events from "./pages/dashboard/Events";
-import CreateEvent from "./pages/dashboard/CreateEvent";
-import EventDetail from "./pages/dashboard/EventDetail";
-import Attendees from "./pages/dashboard/Attendees";
-import Analytics from "./pages/dashboard/Analytics";
-import Integrations from "./pages/dashboard/Integrations";
-import SettingsPage from "./pages/dashboard/SettingsPage";
-import NotFound from "./pages/NotFound";
+
+// Lazy-load all other routes to reduce initial JS bundle size
+const Auth = lazy(() => import("./pages/Auth"));
+const Register = lazy(() => import("./pages/Register"));
+const CompanyPage = lazy(() => import("./pages/CompanyPage"));
+const PublicEvents = lazy(() => import("./pages/PublicEvents"));
+const CheckIn = lazy(() => import("./pages/CheckIn"));
+const Events = lazy(() => import("./pages/dashboard/Events"));
+const CreateEvent = lazy(() => import("./pages/dashboard/CreateEvent"));
+const EventDetail = lazy(() => import("./pages/dashboard/EventDetail"));
+const Attendees = lazy(() => import("./pages/dashboard/Attendees"));
+const Analytics = lazy(() => import("./pages/dashboard/Analytics"));
+const Integrations = lazy(() => import("./pages/dashboard/Integrations"));
+const SettingsPage = lazy(() => import("./pages/dashboard/SettingsPage"));
+const NotFound = lazy(() => import("./pages/NotFound"));
 
 const queryClient = new QueryClient();
 
@@ -43,36 +46,38 @@ const App = () => (
           <Sonner />
           <BrowserRouter>
             <ScrollToTop />
-            <Routes>
-              {/* Public */}
-              <Route path="/" element={<Landing />} />
-              <Route path="/events" element={<PublicEvents />} />
-              <Route path="/auth" element={<Auth />} />
-              <Route path="/register/:slug" element={<Register />} />
-              <Route path="/check-in/:registrationId" element={<CheckIn />} />
-              <Route path="/company/:companySlug" element={<CompanyPage />} />
+            <Suspense fallback={null}>
+              <Routes>
+                {/* Public */}
+                <Route path="/" element={<Landing />} />
+                <Route path="/events" element={<PublicEvents />} />
+                <Route path="/auth" element={<Auth />} />
+                <Route path="/register/:slug" element={<Register />} />
+                <Route path="/check-in/:registrationId" element={<CheckIn />} />
+                <Route path="/company/:companySlug" element={<CompanyPage />} />
 
-              {/* Dashboard (protected) */}
-              <Route path="/dashboard" element={<Navigate to="/dashboard/events" replace />} />
-              <Route path="/dashboard/*" element={
-                <ProtectedRoute>
-                  <DashboardLayout>
-                    <Routes>
-                      <Route path="events" element={<Events />} />
-                      <Route path="events/create" element={<CreateEvent />} />
-                      <Route path="events/:id" element={<EventDetail />} />
-                      <Route path="events/:id/edit" element={<CreateEvent />} />
-                      <Route path="attendees" element={<Attendees />} />
-                      <Route path="analytics" element={<Analytics />} />
-                      <Route path="integrations" element={<Integrations />} />
-                      <Route path="settings" element={<SettingsPage />} />
-                    </Routes>
-                  </DashboardLayout>
-                </ProtectedRoute>
-              } />
+                {/* Dashboard (protected) */}
+                <Route path="/dashboard" element={<Navigate to="/dashboard/events" replace />} />
+                <Route path="/dashboard/*" element={
+                  <ProtectedRoute>
+                    <DashboardLayout>
+                      <Routes>
+                        <Route path="events" element={<Events />} />
+                        <Route path="events/create" element={<CreateEvent />} />
+                        <Route path="events/:id" element={<EventDetail />} />
+                        <Route path="events/:id/edit" element={<CreateEvent />} />
+                        <Route path="attendees" element={<Attendees />} />
+                        <Route path="analytics" element={<Analytics />} />
+                        <Route path="integrations" element={<Integrations />} />
+                        <Route path="settings" element={<SettingsPage />} />
+                      </Routes>
+                    </DashboardLayout>
+                  </ProtectedRoute>
+                } />
 
-              <Route path="*" element={<NotFound />} />
-            </Routes>
+                <Route path="*" element={<NotFound />} />
+              </Routes>
+            </Suspense>
           </BrowserRouter>
         </TooltipProvider>
       </AuthProvider>
