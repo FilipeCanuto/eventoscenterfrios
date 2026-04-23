@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { buildConfirmation } from "../_shared/email-templates.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -9,180 +10,12 @@ const corsHeaders = {
 
 const GATEWAY_URL = "https://connector-gateway.lovable.dev/resend";
 const FROM_ADDRESS = "Eventos Centerfrios <eventos@eventos.centerfrios.com>";
+const REPLY_TO_ADDRESS = "contato@eventos.centerfrios.com";
+const UNSUBSCRIBE_MAILTO = "contato@eventos.centerfrios.com";
 
 interface Payload {
   registrationId: string;
   origin?: string | null;
-}
-
-function escapeHtml(s: string) {
-  return s.replace(/[&<>"']/g, (c) =>
-    ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]!)
-  );
-}
-
-function fmtDate(iso?: string | null, tz?: string | null) {
-  if (!iso) return null;
-  try {
-    const d = new Date(iso);
-    const date = new Intl.DateTimeFormat("pt-BR", {
-      day: "2-digit", month: "long", year: "numeric",
-      timeZone: tz || "America/Sao_Paulo",
-    }).format(d);
-    const time = new Intl.DateTimeFormat("pt-BR", {
-      hour: "2-digit", minute: "2-digit",
-      timeZone: tz || "America/Sao_Paulo",
-    }).format(d);
-    return { date, time };
-  } catch { return null; }
-}
-
-const REPLY_TO_ADDRESS = "contato@eventos.centerfrios.com";
-const UNSUBSCRIBE_MAILTO = "contato@eventos.centerfrios.com";
-
-interface EmailContext {
-  registrationId: string;
-  recipientEmail: string;
-  recipientName: string;
-  eventName: string;
-  eventDate: string | null;
-  eventEndDate: string | null;
-  timezone: string | null;
-  locationType: string | null;
-  locationValue: string | null;
-  eventSlug: string;
-  primaryColor: string | null;
-  logoUrl: string | null;
-  flyerUrl: string | null;
-}
-
-function buildPlainText(p: EmailContext, origin: string) {
-  const start = fmtDate(p.eventDate, p.timezone);
-  const end = fmtDate(p.eventEndDate, p.timezone);
-  let when = "Data a confirmar";
-  if (start && end && p.eventDate?.slice(0, 10) !== p.eventEndDate?.slice(0, 10)) {
-    when = `${start.date} a ${end.date} — ${start.time} às ${end.time}`;
-  } else if (start && end) {
-    when = `${start.date} — ${start.time} às ${end.time}`;
-  } else if (start) {
-    when = `${start.date} — ${start.time}`;
-  }
-  const isOnline = (p.locationType || "").toLowerCase() === "online";
-  const where = p.locationValue
-    ? `${isOnline ? "Link de acesso" : "Local"}: ${p.locationValue}`
-    : "Local: a definir";
-  const greet = p.recipientName?.trim() ? `Olá, ${p.recipientName.trim()}!` : "Olá!";
-  const url = `${origin}/register/${encodeURIComponent(p.eventSlug)}`;
-  const checkInUrl = `${origin}/check-in/${p.registrationId}`;
-  const cleanName = sanitizeSubject(p.eventName);
-  return [
-    greet,
-    "",
-    `Sua inscrição em "${cleanName}" foi confirmada.`,
-    "",
-    `Quando: ${when}`,
-    where,
-    "",
-    `Seu ingresso digital (check-in): ${checkInUrl}`,
-    `Página do evento: ${url}`,
-    "",
-    "Guarde este e-mail como comprovante. Enviaremos lembretes próximos da data.",
-    "",
-    "Equipe Eventos Centerfrios",
-    `Para parar de receber estes avisos, responda este e-mail com "sair".`,
-  ].join("\n");
-}
-
-function sanitizeSubject(s: string) {
-  return (s || "").replace(/[\r\n\t]+/g, " ").replace(/\s{2,}/g, " ").trim();
-}
-
-function buildHtml(p: EmailContext, origin: string) {
-  const brand = p.primaryColor || "#E11D74";
-  const safeName = escapeHtml(p.recipientName?.trim() || "");
-  const greeting = safeName ? `Olá, ${safeName}!` : "Olá!";
-  const start = fmtDate(p.eventDate, p.timezone);
-  const end = fmtDate(p.eventEndDate, p.timezone);
-
-  let dateLine = "";
-  if (start && end && p.eventDate?.slice(0, 10) !== p.eventEndDate?.slice(0, 10)) {
-    dateLine = `${start.date} a ${end.date}<br/><strong>${start.time} – ${end.time}</strong>`;
-  } else if (start && end) {
-    dateLine = `${start.date}<br/><strong>${start.time} – ${end.time}</strong>`;
-  } else if (start) {
-    dateLine = `${start.date}<br/><strong>${start.time}</strong>`;
-  } else {
-    dateLine = "Data a confirmar";
-  }
-
-  const isOnline = (p.locationType || "").toLowerCase() === "online";
-  const locationBlock = p.locationValue
-    ? isOnline
-      ? `<a href="${escapeHtml(p.locationValue)}" style="color:${brand};text-decoration:none">${escapeHtml(p.locationValue)}</a>`
-      : escapeHtml(p.locationValue)
-    : "A definir";
-  const locationLabel = isOnline ? "Link de acesso" : "Local";
-
-  const eventUrl = `${origin}/register/${encodeURIComponent(p.eventSlug)}`;
-  const checkInUrl = `${origin}/check-in/${p.registrationId}`;
-  const qrSrc = `https://api.qrserver.com/v1/create-qr-code/?size=240x240&margin=2&data=${encodeURIComponent(checkInUrl)}`;
-  const logoBlock = p.logoUrl
-    ? `<img src="${escapeHtml(p.logoUrl)}" alt="" height="40" style="display:block;margin:0 auto 12px;max-height:40px"/>`
-    : "";
-
-  // Cabeçalho compacto (sem banner do evento)
-  const heroBlock = `<tr><td style="background:${brand};padding:28px 24px;text-align:center;color:#fff">
-          ${logoBlock}
-          <div style="font-size:13px;letter-spacing:.08em;text-transform:uppercase;opacity:.9">Inscrição confirmada</div>
-          <div style="font-size:22px;font-weight:700;margin-top:6px;line-height:1.25">${escapeHtml(p.eventName)}</div>
-        </td></tr>`;
-
-  return `<!doctype html>
-<html lang="pt-BR"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/><title>Inscrição confirmada</title></head>
-<body style="margin:0;padding:0;background:#f6f6f7;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#111">
-  <div style="display:none;max-height:0;overflow:hidden;opacity:0;color:transparent">Tudo certo! Guarde este e-mail como comprovante da sua inscrição.</div>
-  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f6f6f7;padding:32px 16px">
-    <tr><td align="center">
-      <table role="presentation" width="560" cellpadding="0" cellspacing="0" style="max-width:560px;width:100%;background:#ffffff;border-radius:20px;overflow:hidden;box-shadow:0 1px 2px rgba(0,0,0,0.04)">
-        ${heroBlock}
-        <tr><td style="padding:28px 28px 8px">
-          <p style="margin:0 0 12px;font-size:16px">${greeting}</p>
-          <p style="margin:0 0 20px;font-size:15px;line-height:1.55;color:#444">
-            Recebemos a sua inscrição. Guarde este e-mail — ele é a sua confirmação.
-          </p>
-          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f9fafb;border-radius:14px;padding:18px 20px;margin:0 0 20px">
-            <tr><td style="font-size:12px;text-transform:uppercase;letter-spacing:.06em;color:#6b7280;padding-bottom:6px">Quando</td></tr>
-            <tr><td style="font-size:15px;color:#111;line-height:1.5;padding-bottom:14px">${dateLine}</td></tr>
-            <tr><td style="font-size:12px;text-transform:uppercase;letter-spacing:.06em;color:#6b7280;padding-bottom:6px">${locationLabel}</td></tr>
-            <tr><td style="font-size:15px;color:#111;line-height:1.5">${locationBlock}</td></tr>
-          </table>
-          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#ffffff;border:1px solid #eef0f3;border-radius:14px;padding:20px;margin:0 0 8px">
-            <tr><td style="text-align:center;font-size:12px;text-transform:uppercase;letter-spacing:.06em;color:#6b7280;padding-bottom:10px">Seu ingresso digital</td></tr>
-            <tr><td style="text-align:center;padding-bottom:10px">
-              <a href="${checkInUrl}" style="display:inline-block;text-decoration:none">
-                <img src="${qrSrc}" alt="QR Code de check-in" width="220" height="220" style="display:block;width:220px;height:220px;border:0"/>
-              </a>
-            </td></tr>
-            <tr><td style="text-align:center;font-size:13px;color:#6b7280;line-height:1.5">
-              Apresente este QR Code na entrada do evento.<br/>
-              <a href="${checkInUrl}" style="color:${brand};text-decoration:none;font-weight:600">Ou clique aqui para fazer check-in</a>
-            </td></tr>
-          </table>
-          <div style="text-align:center;margin:20px 0 8px">
-            <a href="${eventUrl}" style="display:inline-block;background:${brand};color:#fff;text-decoration:none;font-weight:600;padding:14px 26px;border-radius:999px;font-size:15px">Ver página do evento</a>
-          </div>
-          <p style="margin:20px 0 0;font-size:13px;color:#6b7280;line-height:1.55">
-            Adicione o evento à sua agenda e fique de olho nesta caixa de entrada — enviaremos lembretes próximos da data.
-          </p>
-        </td></tr>
-        <tr><td style="padding:24px 28px 28px;text-align:center;color:#9ca3af;font-size:12px">
-          Você está recebendo este e-mail porque se inscreveu em <strong style="color:#6b7280">${escapeHtml(p.eventName)}</strong>.<br/>
-          <span style="opacity:.8">powered by CENTERFRIOS</span>
-        </td></tr>
-      </table>
-    </td></tr>
-  </table>
-</body></html>`;
 }
 
 serve(async (req) => {
@@ -196,16 +29,14 @@ serve(async (req) => {
     if (!LOVABLE_API_KEY || !RESEND_API_KEY) {
       console.error("[send-registration-confirmation] Missing gateway secrets");
       return new Response(JSON.stringify({ error: "Email service not configured" }), {
-        status: 502,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
     const body = (await req.json()) as Payload;
     if (!body?.registrationId || typeof body.registrationId !== "string") {
       return new Response(JSON.stringify({ error: "Missing registrationId" }), {
-        status: 400,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
@@ -214,15 +45,12 @@ serve(async (req) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
     );
 
-    // Authoritative lookup: trust ONLY DB-stored values, ignore caller payload.
-    // This blocks the "open relay" attack where an attacker supplies an arbitrary
-    // recipientEmail with someone else's registrationId.
     const { data: reg, error: regErr } = await supabase
       .from("registrations")
       .select(`
         id, status, lead_email, lead_name, tracking,
         events ( id, name, event_date, event_end_date, timezone,
-                 location_type, location_value, slug, primary_color, logo_url, background_image_url )
+                 location_type, location_value, slug, primary_color, logo_url )
       `)
       .eq("id", body.registrationId)
       .maybeSingle();
@@ -230,69 +58,56 @@ serve(async (req) => {
     if (regErr || !reg) {
       console.warn("[send-registration-confirmation] Registration not found", body.registrationId);
       return new Response(JSON.stringify({ error: "Registration not found" }), {
-        status: 404,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
     if (reg.status === "cancelled") {
       return new Response(JSON.stringify({ error: "Registration cancelled" }), {
-        status: 400,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
     const recipientEmail = (reg.lead_email || "").trim();
     if (!recipientEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(recipientEmail)) {
       return new Response(JSON.stringify({ error: "No valid email on registration" }), {
-        status: 400,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
     const ev = (reg as any).events;
     if (!ev) {
       return new Response(JSON.stringify({ error: "Event not found" }), {
-        status: 404,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    // Persistent idempotency: prevents replay-based abuse (sending the same
-    // confirmation repeatedly by re-invoking the function).
+    // Schedule reminders (idempotent via UNIQUE constraint)
+    try {
+      await supabase.rpc("schedule_event_reminders", { p_registration_id: reg.id });
+    } catch (e) {
+      console.warn("[send-registration-confirmation] schedule_event_reminders failed", e);
+    }
+
     const tracking = (reg.tracking as Record<string, unknown>) || {};
     if (tracking.confirmation_email_sent_at) {
       console.log("[send-registration-confirmation] Already sent, skipping", body.registrationId);
       return new Response(JSON.stringify({ ok: true, alreadySent: true }), {
-        status: 200,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
-
-    const ctx: EmailContext = {
-      registrationId: reg.id,
-      recipientEmail,
-      recipientName: reg.lead_name || "",
-      eventName: ev.name,
-      eventDate: ev.event_date,
-      eventEndDate: ev.event_end_date,
-      timezone: ev.timezone,
-      locationType: ev.location_type,
-      locationValue: ev.location_value,
-      eventSlug: ev.slug,
-      primaryColor: ev.primary_color,
-      logoUrl: ev.logo_url,
-      flyerUrl: ev.background_image_url,
-    };
 
     const origin =
       body.origin?.replace(/\/$/, "") ||
       req.headers.get("origin")?.replace(/\/$/, "") ||
-      "https://eventoscenterfrios.lovable.app";
+      "https://eventos.centerfrios.com";
 
-    const html = buildHtml(ctx, origin);
-    const text = buildPlainText(ctx, origin);
-    const subject = sanitizeSubject(`Inscrição confirmada — ${ctx.eventName}`);
+    const built = buildConfirmation({
+      registrationId: reg.id,
+      recipientName: reg.lead_name || "",
+      event: ev,
+      origin,
+    });
 
     const resp = await fetch(`${GATEWAY_URL}/emails`, {
       method: "POST",
@@ -305,16 +120,16 @@ serve(async (req) => {
         from: FROM_ADDRESS,
         to: [recipientEmail],
         reply_to: REPLY_TO_ADDRESS,
-        subject,
-        html,
-        text,
+        subject: built.subject,
+        html: built.html,
+        text: built.text,
         headers: {
           "List-Unsubscribe": `<mailto:${UNSUBSCRIBE_MAILTO}?subject=unsubscribe>`,
           "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
         },
         tags: [
           { name: "type", value: "registration_confirmation" },
-          { name: "event_slug", value: (ctx.eventSlug || "unknown").slice(0, 50) },
+          { name: "event_slug", value: (ev.slug || "unknown").slice(0, 50) },
         ],
       }),
     });
@@ -324,8 +139,7 @@ serve(async (req) => {
       console.error("[send-registration-confirmation] Resend error", resp.status, respBody);
       if (resp.status === 401 || resp.status === 403) {
         return new Response(JSON.stringify({ error: "Email auth failed" }), {
-          status: 502,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
+          status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
       return new Response(
@@ -334,7 +148,6 @@ serve(async (req) => {
       );
     }
 
-    // Mark sent for idempotency
     await supabase
       .from("registrations")
       .update({
@@ -344,14 +157,12 @@ serve(async (req) => {
 
     console.log("[send-registration-confirmation] Sent", recipientEmail);
     return new Response(JSON.stringify({ ok: true }), {
-      status: 200,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
+      status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (e) {
     console.error("[send-registration-confirmation] Unhandled", e);
     return new Response(JSON.stringify({ error: "Internal error" }), {
-      status: 500,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
+      status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
 });
