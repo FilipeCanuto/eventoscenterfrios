@@ -116,7 +116,7 @@ const Attendees = () => {
 
   const handleExportCSV = () => {
     if (!filtered?.length) return;
-    const headers = ["Nome", "E-mail", "WhatsApp", "Evento", "Origem", "Status", "Data"];
+    const headers = ["Nome", "E-mail", "WhatsApp", "Evento", "Origem", "Status", "Inscrição", "Check-in em"];
     const rows = filtered.map((r: any) => {
       const data = r.data as Record<string, string>;
       return [
@@ -127,6 +127,7 @@ const Attendees = () => {
         getSource(r),
         statusLabels[r.status] || r.status,
         format(new Date(r.created_at), "d MMM yyyy HH:mm", { locale: ptBR }),
+        r.checked_in_at ? format(new Date(r.checked_in_at), "d MMM yyyy HH:mm", { locale: ptBR }) : "",
       ];
     });
     const escapeCSV = (val: string): string => {
@@ -231,7 +232,10 @@ const Attendees = () => {
                     <span className="flex items-center text-xs font-semibold uppercase tracking-wider text-muted-foreground">Status <SortIcon col="status" /></span>
                   </TableHead>
                   <TableHead className="cursor-pointer select-none hidden lg:table-cell" onClick={() => handleSort("date")}>
-                    <span className="flex items-center text-xs font-semibold uppercase tracking-wider text-muted-foreground">Data <SortIcon col="date" /></span>
+                    <span className="flex items-center text-xs font-semibold uppercase tracking-wider text-muted-foreground">Inscrição <SortIcon col="date" /></span>
+                  </TableHead>
+                  <TableHead className="hidden lg:table-cell">
+                    <span className="flex items-center text-xs font-semibold uppercase tracking-wider text-muted-foreground">Check-in em</span>
                   </TableHead>
                 </TableRow>
               </TableHeader>
@@ -255,6 +259,9 @@ const Attendees = () => {
                         <Badge className={`${statusStyle[r.status] || ""} text-xs`}>{statusLabels[r.status] || r.status.replace("_", " ")}</Badge>
                       </TableCell>
                       <TableCell className="text-muted-foreground hidden lg:table-cell whitespace-nowrap">{format(new Date(r.created_at), "d MMM yyyy HH:mm", { locale: ptBR })}</TableCell>
+                      <TableCell className="text-muted-foreground hidden lg:table-cell whitespace-nowrap">
+                        {r.checked_in_at ? format(new Date(r.checked_in_at), "d MMM yyyy HH:mm", { locale: ptBR }) : <span className="text-muted-foreground/50">—</span>}
+                      </TableCell>
                     </TableRow>
                   );
                 })}

@@ -102,7 +102,7 @@ export default function EventAttendeesTable({ eventId }: { eventId: string }) {
 
   const handleExportCSV = () => {
     if (!filtered?.length) return;
-    const headers = ["Nome", "E-mail", "WhatsApp", "Status", "Origem", "Data"];
+    const headers = ["Nome", "E-mail", "WhatsApp", "Status", "Origem", "Inscrição", "Check-in em"];
     const rows = filtered.map((r: any) => {
       const data = r.data as Record<string, string>;
       return [
@@ -112,6 +112,7 @@ export default function EventAttendeesTable({ eventId }: { eventId: string }) {
         statusLabels[r.status] || r.status,
         getSource(r),
         format(new Date(r.created_at), "d MMM yyyy HH:mm", { locale: ptBR }),
+        r.checked_in_at ? format(new Date(r.checked_in_at), "d MMM yyyy HH:mm", { locale: ptBR }) : "",
       ];
     });
     const escapeCSV = (val: string): string => {
@@ -193,8 +194,9 @@ export default function EventAttendeesTable({ eventId }: { eventId: string }) {
                     <span className="flex items-center">Status <SortIcon col="status" /></span>
                   </TableHead>
                   <TableHead className="cursor-pointer select-none" onClick={() => handleSort("date")}>
-                    <span className="flex items-center">Data <SortIcon col="date" /></span>
+                    <span className="flex items-center">Inscrição <SortIcon col="date" /></span>
                   </TableHead>
+                  <TableHead className="hidden md:table-cell">Check-in em</TableHead>
                   <TableHead className="text-right">Ações</TableHead>
                 </TableRow>
               </TableHeader>
@@ -214,6 +216,9 @@ export default function EventAttendeesTable({ eventId }: { eventId: string }) {
                         <Badge className={`${statusStyle[r.status] || ""} text-xs`}>{statusLabels[r.status] || r.status.replace("_", " ")}</Badge>
                       </TableCell>
                       <TableCell className="text-muted-foreground text-sm whitespace-nowrap">{format(new Date(r.created_at), "d MMM HH:mm", { locale: ptBR })}</TableCell>
+                      <TableCell className="hidden md:table-cell text-sm text-muted-foreground whitespace-nowrap">
+                        {r.checked_in_at ? format(new Date(r.checked_in_at), "d MMM HH:mm", { locale: ptBR }) : <span className="text-muted-foreground/50">—</span>}
+                      </TableCell>
                       <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
                         <div className="flex items-center justify-end gap-1">
                           {r.status === "registered" && (
