@@ -2,3 +2,6 @@ project_id = "ahwecyjzzczcwunptxae"
 
 [functions.send-registration-confirmation]
 verify_jwt = false
+
+[functions.process-reminder-queue]
+verify_jwt = false
