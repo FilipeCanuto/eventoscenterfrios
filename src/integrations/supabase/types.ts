@@ -333,6 +333,7 @@ export type Database = {
       }
       registrations: {
         Row: {
+          checked_in_at: string | null
           created_at: string
           data: Json
           event_id: string
@@ -344,6 +345,7 @@ export type Database = {
           tracking: Json
         }
         Insert: {
+          checked_in_at?: string | null
           created_at?: string
           data?: Json
           event_id: string
@@ -355,6 +357,7 @@ export type Database = {
           tracking?: Json
         }
         Update: {
+          checked_in_at?: string | null
           created_at?: string
           data?: Json
           event_id?: string
@@ -371,6 +374,66 @@ export type Database = {
             columns: ["event_id"]
             isOneToOne: false
             referencedRelation: "events"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      scheduled_emails: {
+        Row: {
+          attempts: number
+          created_at: string
+          email_type: string
+          error: string | null
+          event_id: string
+          id: string
+          registration_id: string
+          send_at: string
+          sent_at: string | null
+          status: string
+          unsubscribe_token: string
+          updated_at: string
+        }
+        Insert: {
+          attempts?: number
+          created_at?: string
+          email_type: string
+          error?: string | null
+          event_id: string
+          id?: string
+          registration_id: string
+          send_at: string
+          sent_at?: string | null
+          status?: string
+          unsubscribe_token?: string
+          updated_at?: string
+        }
+        Update: {
+          attempts?: number
+          created_at?: string
+          email_type?: string
+          error?: string | null
+          event_id?: string
+          id?: string
+          registration_id?: string
+          send_at?: string
+          sent_at?: string | null
+          status?: string
+          unsubscribe_token?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "scheduled_emails_event_id_fkey"
+            columns: ["event_id"]
+            isOneToOne: false
+            referencedRelation: "events"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "scheduled_emails_registration_id_fkey"
+            columns: ["registration_id"]
+            isOneToOne: false
+            referencedRelation: "registrations"
             referencedColumns: ["id"]
           },
         ]
@@ -430,6 +493,15 @@ export type Database = {
       }
     }
     Functions: {
+      get_check_in_window: {
+        Args: { p_registration_id: string }
+        Returns: {
+          event_date: string
+          event_end_date: string
+          window_end: string
+          window_start: string
+        }[]
+      }
       get_registration_count: { Args: { p_event_id: string }; Returns: number }
       has_role: {
         Args: {
@@ -445,6 +517,14 @@ export type Database = {
             Args: { p_data: Json; p_event_id: string; p_tracking?: Json }
             Returns: string
           }
+      reschedule_event_reminders: {
+        Args: { p_event_id: string }
+        Returns: undefined
+      }
+      schedule_event_reminders: {
+        Args: { p_registration_id: string }
+        Returns: undefined
+      }
       track_page_view: {
         Args: {
           p_data?: Json
@@ -454,6 +534,7 @@ export type Database = {
         }
         Returns: string
       }
+      unsubscribe_reminders: { Args: { p_token: string }; Returns: string }
     }
     Enums: {
       app_role: "admin" | "editor" | "viewer"
