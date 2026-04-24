@@ -435,7 +435,7 @@ const RegistrationForm = ({
                           : selectedMulti.filter((x) => x !== opt);
                         // Preserve original option order
                         const ordered = options.filter((o) => next.includes(o));
-                        onFieldChange(field.label, ordered.join(", "));
+                        onFieldChange(field.label, ordered.join(MULTI_SEP));
                       }}
                     />
                     <Label htmlFor={id} className="text-sm cursor-pointer font-normal">{opt}</Label>
