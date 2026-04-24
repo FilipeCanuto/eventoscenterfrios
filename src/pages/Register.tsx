@@ -413,7 +413,9 @@ const RegistrationForm = ({
       const isSelect = field.field_type === "select";
       const isMulti = field.field_type === "multiselect";
       const options = Array.isArray((field as any).options) ? ((field as any).options as string[]) : [];
-      const selectedMulti = isMulti ? value.split(", ").filter(Boolean) : [];
+      // Use Unit Separator (\u001F) internally so option labels containing ", " (e.g. "Terça, 05/05") don't collide with the delimiter.
+      const MULTI_SEP = "\u001F";
+      const selectedMulti = isMulti ? value.split(MULTI_SEP).filter(Boolean) : [];
       return (
         <div key={field.id} className="space-y-2">
           <Label>{field.label}{field.required && " *"}</Label>
