@@ -19,6 +19,7 @@ const CompanyPage = lazy(() => import("./pages/CompanyPage"));
 const PublicEvents = lazy(() => import("./pages/PublicEvents"));
 const CheckIn = lazy(() => import("./pages/CheckIn"));
 const UnsubscribeReminders = lazy(() => import("./pages/UnsubscribeReminders"));
+const PrivacyPolicy = lazy(() => import("./pages/PrivacyPolicy"));
 const Events = lazy(() => import("./pages/dashboard/Events"));
 const CreateEvent = lazy(() => import("./pages/dashboard/CreateEvent"));
 const EventDetail = lazy(() => import("./pages/dashboard/EventDetail"));
@@ -57,6 +58,7 @@ const App = () => (
                 <Route path="/check-in/:registrationId" element={<CheckIn />} />
                 <Route path="/unsubscribe-reminders/:token" element={<UnsubscribeReminders />} />
                 <Route path="/company/:companySlug" element={<CompanyPage />} />
+                <Route path="/privacidade" element={<PrivacyPolicy />} />
 
                 {/* Dashboard (protected) */}
                 <Route path="/dashboard" element={<Navigate to="/dashboard/events" replace />} />

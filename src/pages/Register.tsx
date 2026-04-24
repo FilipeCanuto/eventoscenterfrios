@@ -452,9 +452,19 @@ const RegistrationForm = ({
       );
     })}
     <div className="flex items-start gap-2 pt-2">
-      <Checkbox id="gdpr" checked={consent} onCheckedChange={(c) => onConsentChange(!!c)} />
-      <Label htmlFor="gdpr" className="text-xs text-muted-foreground leading-relaxed">
-        Concordo em receber comunicações sobre este evento e consinto com o processamento dos meus dados de acordo com a Política de Privacidade.
+      <Checkbox id="gdpr" checked={consent} onCheckedChange={(c) => onConsentChange(!!c)} className="mt-0.5" />
+      <Label htmlFor="gdpr" className="text-xs text-muted-foreground leading-relaxed cursor-pointer">
+        Li e concordo com a{" "}
+        <a
+          href="/privacidade"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-primary underline underline-offset-2 hover:opacity-80"
+          onClick={(e) => e.stopPropagation()}
+        >
+          Política de Privacidade
+        </a>
+        . Autorizo o uso da minha imagem (foto e vídeo) captada durante o evento para divulgação nos canais digitais da CENTERFRIOS, conforme a LGPD (Lei 13.709/2018).
       </Label>
     </div>
     <Button
@@ -635,7 +645,7 @@ const Register = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!consent) {
-      toast.error("Aceite a política de privacidade para se inscrever.");
+      toast.error("Aceite a Política de Privacidade e a autorização de uso de imagem para se inscrever.");
       return;
     }
     const missing = formFields?.filter(f => f.required && !formData[f.label]?.trim());
