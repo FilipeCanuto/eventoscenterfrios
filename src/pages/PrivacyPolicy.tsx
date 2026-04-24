@@ -5,6 +5,7 @@ import { Logo } from "@/components/Logo";
 import { Button } from "@/components/ui/button";
 
 const LAST_UPDATED = "24 de abril de 2026";
+const DPO_EMAIL = "adm@centerfrios.com";
 
 const PrivacyPolicy = () => {
   useEffect(() => {
@@ -19,6 +20,17 @@ const PrivacyPolicy = () => {
       m.content = desc;
       document.head.appendChild(m);
     }
+  }, []);
+
+  // Swap favicon for the privacy policy page only
+  useEffect(() => {
+    const link = document.querySelector<HTMLLinkElement>("link[rel~='icon']");
+    if (!link) return;
+    const previous = link.href;
+    link.href = "/favicon-circuito.png";
+    return () => {
+      link.href = previous;
+    };
   }, []);
 
   return (
@@ -62,15 +74,16 @@ const PrivacyPolicy = () => {
               tratados nesta plataforma de inscrição.
             </p>
             <ul>
-              <li>Razão social: <em>[A PREENCHER]</em></li>
-              <li>CNPJ: <em>[A PREENCHER]</em></li>
+              <li>Razão social: <strong>Center Frios Máquinas e Equipamentos LTDA</strong></li>
+              <li>CNPJ: <strong>06.698.222/0003-78</strong></li>
+              <li>Telefone: <strong>(82) 3223-2497</strong></li>
               <li>
                 Encarregado pelo Tratamento de Dados (DPO):{" "}
                 <a
-                  href="mailto:privacidade@centerfrios.com"
+                  href={`mailto:${DPO_EMAIL}`}
                   className="text-primary underline underline-offset-2"
                 >
-                  privacidade@centerfrios.com
+                  {DPO_EMAIL}
                 </a>
               </li>
             </ul>
@@ -142,10 +155,10 @@ const PrivacyPolicy = () => {
                 O participante poderá, a qualquer momento, solicitar a remoção
                 de fotos ou vídeos específicos enviando uma solicitação para{" "}
                 <a
-                  href="mailto:privacidade@centerfrios.com"
+                  href="mailto:adm@centerfrios.com"
                   className="text-primary underline underline-offset-2"
                 >
-                  privacidade@centerfrios.com
+                  adm@centerfrios.com
                 </a>
                 .
               </p>
@@ -186,10 +199,10 @@ const PrivacyPolicy = () => {
             <p>
               Para exercer esses direitos, entre em contato pelo e-mail{" "}
               <a
-                href="mailto:privacidade@centerfrios.com"
+                href="mailto:adm@centerfrios.com"
                 className="text-primary underline underline-offset-2"
               >
-                privacidade@centerfrios.com
+                adm@centerfrios.com
               </a>
               . Você também pode descadastrar-se dos lembretes por e-mail
               através do link presente em cada mensagem enviada.
@@ -233,12 +246,13 @@ const PrivacyPolicy = () => {
               <li>
                 E-mail:{" "}
                 <a
-                  href="mailto:privacidade@centerfrios.com"
+                  href="mailto:adm@centerfrios.com"
                   className="text-primary underline underline-offset-2"
                 >
-                  privacidade@centerfrios.com
+                  adm@centerfrios.com
                 </a>
               </li>
+              <li>Telefone: (82) 3223-2497</li>
               <li>Site: centerfrios.com</li>
             </ul>
           </Section>
