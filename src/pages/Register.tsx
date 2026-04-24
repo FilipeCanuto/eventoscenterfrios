@@ -710,7 +710,14 @@ const Register = () => {
     }
     try {
       const utms = utmsRef.current || {};
-      const registrationId = (await createReg.mutateAsync({ event_id: event.id, data: formData, tracking: utms })) as unknown as string;
+      // Normalize multiselect fields from internal "\u001F" separator to a human-readable ", " before persisting.
+      const normalizedData: Record<string, string> = { ...formData };
+      formFields?.forEach((f) => {
+        if (f.field_type === "multiselect" && typeof normalizedData[f.label] === "string") {
+          normalizedData[f.label] = normalizedData[f.label].split("\u001F").filter(Boolean).join(", ");
+        }
+      });
+      const registrationId = (await createReg.mutateAsync({ event_id: event.id, data: normalizedData, tracking: utms })) as unknown as string;
       // Marca conversão na visita rastreada
       if (registrationId) {
         trackPageView(event.id, { converted_registration_id: registrationId });
