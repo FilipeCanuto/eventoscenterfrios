@@ -22,14 +22,20 @@ const PrivacyPolicy = () => {
     }
   }, []);
 
-  // Swap favicon for the privacy policy page only
+  // Ensure favicon is the circuito icon on the privacy policy page
   useEffect(() => {
-    const link = document.querySelector<HTMLLinkElement>("link[rel~='icon']");
-    if (!link) return;
+    let link = document.querySelector<HTMLLinkElement>("link[rel~='icon']");
+    const created = !link;
+    if (!link) {
+      link = document.createElement("link");
+      link.rel = "icon";
+      document.head.appendChild(link);
+    }
     const previous = link.href;
     link.href = "/favicon-circuito.png";
     return () => {
-      link.href = previous;
+      if (created) link!.remove();
+      else link!.href = previous;
     };
   }, []);
 

@@ -1,53 +1,62 @@
-## Resumo
+## Problema identificado
 
-Vou (1) preencher os dados reais da empresa na Política de Privacidade, (2) salvar o favicon enviado em `public/` e usá-lo dinamicamente nas páginas `/registrar` e `/privacidade` (substituindo o favicon padrão apenas nessas rotas), e (3) armazenar o arquivo também no bucket `event-assets` do Lovable Cloud para reutilização futura.
+O favicon do circuito **não está aparecendo** nas páginas de Inscrição, Obrigado e Política de Privacidade, apesar do código já ter sido escrito anteriormente. Causa raiz:
 
----
+- O `index.html` **não declara nenhuma tag** `<link rel="icon">`. O browser está caindo no fallback automático `/favicon.ico` (arquivo legado da Lovable que ainda existe em `public/`).
+- Os `useEffect` em `Register.tsx` e `PrivacyPolicy.tsx` fazem `document.querySelector("link[rel~='icon']")` — como a tag não existe, o resultado é `null` e o swap é silenciosamente ignorado.
+- A página de "Obrigado" é o bloco `success` renderizado dentro do próprio `Register.tsx` (mesma rota), então será coberta automaticamente pela mesma correção.
 
-## 1. Atualizar `src/pages/PrivacyPolicy.tsx`
+## Correções
 
-Substituir os placeholders `[A PREENCHER]` e o e-mail genérico pelos dados oficiais:
+### 1. `index.html` — declarar o favicon padrão
+Adicionar a tag de ícone no `<head>` apontando para o ícone do circuito como favicon **global** do site (assim ele já aparece em todas as páginas, incluindo Landing e Dashboard, mantendo a identidade da CENTERFRIOS):
 
-- **Razão social:** Center Frios Máquinas e Equipamentos LTDA
-- **CNPJ:** 06.698.222/0003-78 (formatado)
-- **E-mail (DPO + contato):** adm@centerfrios.com → trocar todas as ocorrências de `privacidade@centerfrios.com`
-- **Telefone:** (82) 3223-2497 (adicionar nas seções 2 e 12)
-- Atualizar `LAST_UPDATED` para a data de hoje.
+```html
+<link rel="icon" type="image/png" href="/favicon-circuito.png" />
+<link rel="apple-touch-icon" href="/favicon-circuito.png" />
+```
 
-## 2. Adicionar o favicon
+### 2. Remover `public/favicon.ico` legado
+Apagar `public/favicon.ico` (ícone padrão da Lovable) para garantir que o browser não use o fallback antigo em nenhuma circunstância.
 
-**Salvar o arquivo:**
-- Copiar `user-uploads://favicon_circuito_experience.png` → `public/favicon-circuito.png`
-- Também enviar para o bucket `event-assets` (caminho `branding/favicon-circuito.png`, público) para reuso futuro a partir do banco.
+### 3. Tornar o `useEffect` de swap robusto (defensivo)
+Em `Register.tsx` e `PrivacyPolicy.tsx`, ajustar o hook para **criar** a tag `<link rel="icon">` caso ela não exista, em vez de apenas tentar selecioná-la. Isso garante funcionamento mesmo se o `index.html` for alterado no futuro:
 
-**Aplicar o favicon dinamicamente** apenas em `/registrar/:slug` (`Register.tsx`) e `/privacidade` (`PrivacyPolicy.tsx`):
-- Em cada página, dentro de um `useEffect`, localizar `<link rel="icon">` no `<head>` e trocar o `href` para `/favicon-circuito.png`.
-- No cleanup (unmount), restaurar o favicon original (`/favicon.ico` atual do projeto), para não vazar o ícone para o restante do app.
-
-Padrão usado:
-```ts
+```tsx
 useEffect(() => {
-  const link = document.querySelector<HTMLLinkElement>("link[rel~='icon']");
-  const previous = link?.href;
-  if (link) link.href = "/favicon-circuito.png";
-  return () => { if (link && previous) link.href = previous; };
+  let link = document.querySelector<HTMLLinkElement>("link[rel~='icon']");
+  const created = !link;
+  if (!link) {
+    link = document.createElement("link");
+    link.rel = "icon";
+    document.head.appendChild(link);
+  }
+  const previous = link.href;
+  link.href = "/favicon-circuito.png";
+  return () => {
+    if (created) link!.remove();
+    else link!.href = previous;
+  };
 }, []);
 ```
 
-## 3. Persistir no Lovable Cloud (storage)
+## Resultado esperado
 
-Sem nova tabela — basta publicar o arquivo no bucket público `event-assets`. A URL pública (`/storage/v1/object/public/event-assets/branding/favicon-circuito.png`) ficará disponível caso o usuário queira referenciá-lo dinamicamente depois (ex.: vincular favicon por evento futuramente).
-
----
+- **Página de Inscrição** (`/r/:slug`): favicon do circuito ✅
+- **Página de Obrigado** (estado `success` da mesma rota): favicon do circuito ✅
+- **Página de Política de Privacidade** (`/privacidade`): favicon do circuito ✅
+- **Demais páginas (Landing, Dashboard)**: também passam a usar o favicon do circuito como padrão global, reforçando a identidade da CENTERFRIOS.
 
 ## Arquivos afetados
 
-- `src/pages/PrivacyPolicy.tsx` — dados reais da empresa + injeção de favicon
-- `src/pages/Register.tsx` — injeção de favicon
-- `public/favicon-circuito.png` — novo arquivo
-- Storage `event-assets/branding/favicon-circuito.png` — upload via script único
+- `index.html` (adicionar `<link rel="icon">`)
+- `public/favicon.ico` (deletar)
+- `src/pages/Register.tsx` (tornar o swap robusto)
+- `src/pages/PrivacyPolicy.tsx` (tornar o swap robusto)
 
-## Fora do escopo
+## Validação após implementação
 
-- Não alteramos o favicon global do app (`index.html`) — apenas as duas páginas pedidas.
-- Não criamos tabela nova de "branding"; o storage já cumpre o papel de persistência solicitado.
+Abrir cada página em uma aba nova e confirmar visualmente o ícone do circuito na aba do navegador:
+1. `/r/<slug-de-um-evento>` (formulário)
+2. Submeter o formulário e ver a tela de confirmação
+3. `/privacidade`
