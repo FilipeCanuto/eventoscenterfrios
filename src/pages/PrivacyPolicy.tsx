@@ -74,15 +74,16 @@ const PrivacyPolicy = () => {
               tratados nesta plataforma de inscrição.
             </p>
             <ul>
-              <li>Razão social: <em>[A PREENCHER]</em></li>
-              <li>CNPJ: <em>[A PREENCHER]</em></li>
+              <li>Razão social: <strong>Center Frios Máquinas e Equipamentos LTDA</strong></li>
+              <li>CNPJ: <strong>06.698.222/0003-78</strong></li>
+              <li>Telefone: <strong>(82) 3223-2497</strong></li>
               <li>
                 Encarregado pelo Tratamento de Dados (DPO):{" "}
                 <a
-                  href="mailto:privacidade@centerfrios.com"
+                  href={`mailto:${DPO_EMAIL}`}
                   className="text-primary underline underline-offset-2"
                 >
-                  privacidade@centerfrios.com
+                  {DPO_EMAIL}
                 </a>
               </li>
             </ul>
