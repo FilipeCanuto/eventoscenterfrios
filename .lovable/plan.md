@@ -1,67 +1,42 @@
-# Fix: registration page (and entire published site) returning blank
+# Correção: checkbox de "Dias de Comparecimento" não marca
 
-## Diagnóstico — causa raiz
+## Causa raiz (confirmada)
 
-A página de cadastro (e na verdade **todo o site publicado** em `eventos.centerfrios.com` e `eventoscenterfrios.lovable.app`) está em branco. O preview do Lovable funciona normalmente — o problema só ocorre no build de produção.
+O campo "Dias de Comparecimento" é do tipo `multiselect` no banco, com opções como:
+`Terça, 05/05`, `Quarta, 06/05`, `Quinta, 07/05`, `Sexta, 08/05`.
 
-Erro reproduzido no console do site publicado:
+Em `src/pages/Register.tsx` (linhas ~414-437), o componente armazena as opções selecionadas em uma única string `formData[label]` separada por `", "` (vírgula + espaço), e recalcula o estado de cada checkbox com `value.split(", ")`.
 
-```
-Uncaught TypeError: Cannot read properties of undefined (reading 'createContext')
-  at https://eventos.centerfrios.com/assets/vendor-B44iLDgb.js:1:21317
-```
+Como o próprio rótulo da opção contém `", "`, a string `"Terça, 05/05"` é fragmentada em `["Terça", "05/05"]`. Nenhum desses pedaços corresponde à opção original `"Terça, 05/05"`, então o `checked` volta a `false` imediatamente após o clique — o checkbox parece "não marcar".
 
-Investigando os bundles servidos:
+Há ainda colisões secundárias do mesmo padrão em:
+- `src/components/dashboard/RegistrationDetailDialog.tsx` (split `", "` ao exibir)
+- onde quer que o valor salvo seja re-exibido como chips.
 
-- `assets/vendor-B44iLDgb.js` começa com:
-  `import { r as E, R as O, j as he, c as Mr, g as st } from "./react-core-fDo77-Qy.js";`
-- `assets/react-core-fDo77-Qy.js` começa com:
-  `import "./react-dom-D1GBnleL.js"; import { G as S, H as he, ... } from "./vendor-B44iLDgb.js";`
+## Vínculo com a participação do usuário (confirmado)
 
-Ou seja: **`react-core` e `vendor` se importam mutuamente** (import circular). Em produção isso faz com que `vendor` execute antes de `react-core` terminar de inicializar; quando uma dependência dentro de `vendor` (provavelmente `class-variance-authority` / `tailwind-merge` / `next-themes` / etc.) tenta chamar `React.createContext(...)` no top-level, `React` ainda está `undefined` → toda a árvore React falha em montar e a página fica em branco.
+A seleção é gravada na tabela existente `public.registrations`, na coluna `data jsonb`, sob a chave `"Dias de Comparecimento"`. A função RPC `register_for_event` (já em produção) persiste esse JSON normalmente. **Nenhuma nova tabela é necessária** — o vínculo `usuário ↔ evento ↔ dias` já existe via `registrations.event_id` + `registrations.data->'Dias de Comparecimento'`.
 
-A causa está no `vite.config.ts`, na função `manualChunks`:
+## Solução
 
-```ts
-manualChunks: (id) => {
-  if (!id.includes("node_modules")) return undefined;
-  if (id.includes("react-dom")) return "react-dom";
-  if (id.includes("/react/") || id.includes("react-router") || id.includes("scheduler")) return "react-core";
-  if (id.includes("@tanstack")) return "tanstack";
-  if (id.includes("@radix-ui")) return "radix";
-  if (id.includes("@supabase")) return "supabase";
-  if (id.includes("recharts") || id.includes("d3-") || id.includes("victory-vendor")) return "charts";
-  if (id.includes("lucide-react")) return "icons";
-  if (id.includes("date-fns") || id.includes("react-day-picker")) return "date";
-  if (id.includes("react-hook-form") || id.includes("@hookform") || id.includes("zod")) return "forms";
-  return "vendor";
-}
-```
+Trocar o delimitador interno para um caractere que jamais aparecerá nos rótulos:
 
-Problemas:
+1. **`src/pages/Register.tsx`** — no bloco do `multiselect`:
+   - Usar separador interno `"\u001F"` (Unit Separator, invisível) para `selectedMulti` e para a string em `formData`.
+   - Continuar preservando a ordem original das opções.
+   - Antes de enviar (submit), normalizar a string desse campo para `", "` (formato amigável que a UI atual já espera para exibição) **OU** armazenar como array. Para minimizar mudanças, normalizar para `", "` apenas no `payload` enviado ao RPC.
 
-1. O agrupamento `"react-core"` casa apenas `/react/` e `react-router`, mas **não** `react/jsx-runtime` em todos os caminhos do pnpm/bun, nem alguns helpers internos (ex.: `react-is`, `use-sync-external-store`). Esses ficam no chunk `vendor`, que então depende de `react-core` — mas vários pacotes em `vendor` (ex.: `next-themes`, `@radix-ui` re-exportados, `class-variance-authority`) também são importados a partir de `react-core` indiretamente, gerando o ciclo.
-2. O agrupamento foi feito para SEO/performance mas hoje está quebrando a aplicação inteira em produção. Não há ganho que justifique manter o site fora do ar.
+2. **`src/components/dashboard/RegistrationDetailDialog.tsx`** — a exibição como chips (`stringValue.split(", ")`) continua válida porque o valor salvo no banco terá `", "` como separador legível.
 
-## Plano de correção (mínimo e seguro)
+3. Sem mudanças no banco, RLS, RPC ou edge functions.
 
-Apenas 1 arquivo precisa ser alterado.
+## Validação
 
-### `vite.config.ts`
-- Remover o bloco `build.rollupOptions.output.manualChunks` por completo.
-- Manter o restante (`server`, `plugins`, `resolve`, `optimizeDeps`) intacto.
-- O Rollup/Vite cairá no chunking padrão (mesmo chunk para o entry e splits automáticos para imports dinâmicos das rotas `lazy()` já existentes em `App.tsx`). Isso continua dando code-splitting por rota e elimina o ciclo React ↔ vendor.
+- Marcar e desmarcar cada um dos 4 dias na página `/register/...` do evento atual.
+- Confirmar que múltiplos dias permanecem marcados simultaneamente.
+- Submeter inscrição e verificar em `registrations.data` que `"Dias de Comparecimento"` veio salvo como, ex.: `"Terça, 05/05, Quinta, 07/05"`.
+- Conferir que o diálogo de detalhes do participante exibe os chips corretamente.
 
-Resultado:
-- O site publicado volta a renderizar.
-- A página `/register/:slug` carrega normalmente.
-- Nenhuma mudança em UX, dados, RLS, autenticação ou edge functions.
+## Arquivos a alterar
 
-## Validação após o deploy
-1. Recarregar `https://eventos.centerfrios.com/register/circuito-experience-centerfrios-skymsen-rq0bmz` e confirmar que o formulário aparece (campos: Nome, E-mail, Empresa, Segmento, Dias de Comparecimento, WhatsApp).
-2. Verificar console: não deve haver `Cannot read properties of undefined (reading 'createContext')`.
-3. Confirmar que a landing `/` e `/dashboard` também voltam a abrir.
-
-## Observações
-- O preview do Lovable nunca apresentou esse erro porque em dev o Vite serve cada módulo separadamente (sem o split do Rollup), por isso o problema só aparece após publicar.
-- A funcionalidade de "Dias de Comparecimento" (multiselect) e o restante da arquitetura de inscrição já foram validados — não há nada a corrigir nelas; o único bloqueio é o erro de bundling acima.
+- `src/pages/Register.tsx` (handler do multiselect + normalização no submit)
