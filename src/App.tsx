@@ -58,6 +58,7 @@ const App = () => (
                 <Route path="/check-in/:registrationId" element={<CheckIn />} />
                 <Route path="/unsubscribe-reminders/:token" element={<UnsubscribeReminders />} />
                 <Route path="/company/:companySlug" element={<CompanyPage />} />
+                <Route path="/privacidade" element={<PrivacyPolicy />} />
 
                 {/* Dashboard (protected) */}
                 <Route path="/dashboard" element={<Navigate to="/dashboard/events" replace />} />
