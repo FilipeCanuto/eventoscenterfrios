@@ -413,7 +413,9 @@ const RegistrationForm = ({
       const isSelect = field.field_type === "select";
       const isMulti = field.field_type === "multiselect";
       const options = Array.isArray((field as any).options) ? ((field as any).options as string[]) : [];
-      const selectedMulti = isMulti ? value.split(", ").filter(Boolean) : [];
+      // Use Unit Separator (\u001F) internally so option labels containing ", " (e.g. "Terça, 05/05") don't collide with the delimiter.
+      const MULTI_SEP = "\u001F";
+      const selectedMulti = isMulti ? value.split(MULTI_SEP).filter(Boolean) : [];
       return (
         <div key={field.id} className="space-y-2">
           <Label>{field.label}{field.required && " *"}</Label>
@@ -433,7 +435,7 @@ const RegistrationForm = ({
                           : selectedMulti.filter((x) => x !== opt);
                         // Preserve original option order
                         const ordered = options.filter((o) => next.includes(o));
-                        onFieldChange(field.label, ordered.join(", "));
+                        onFieldChange(field.label, ordered.join(MULTI_SEP));
                       }}
                     />
                     <Label htmlFor={id} className="text-sm cursor-pointer font-normal">{opt}</Label>
@@ -708,7 +710,14 @@ const Register = () => {
     }
     try {
       const utms = utmsRef.current || {};
-      const registrationId = (await createReg.mutateAsync({ event_id: event.id, data: formData, tracking: utms })) as unknown as string;
+      // Normalize multiselect fields from internal "\u001F" separator to a human-readable ", " before persisting.
+      const normalizedData: Record<string, string> = { ...formData };
+      formFields?.forEach((f) => {
+        if (f.field_type === "multiselect" && typeof normalizedData[f.label] === "string") {
+          normalizedData[f.label] = normalizedData[f.label].split("\u001F").filter(Boolean).join(", ");
+        }
+      });
+      const registrationId = (await createReg.mutateAsync({ event_id: event.id, data: normalizedData, tracking: utms })) as unknown as string;
       // Marca conversão na visita rastreada
       if (registrationId) {
         trackPageView(event.id, { converted_registration_id: registrationId });
