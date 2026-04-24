@@ -252,6 +252,7 @@ const PrivacyPolicy = () => {
                   adm@centerfrios.com
                 </a>
               </li>
+              <li>Telefone: (82) 3223-2497</li>
               <li>Site: centerfrios.com</li>
             </ul>
           </Section>
