@@ -5,6 +5,7 @@ import { Logo } from "@/components/Logo";
 import { Button } from "@/components/ui/button";
 
 const LAST_UPDATED = "24 de abril de 2026";
+const DPO_EMAIL = "adm@centerfrios.com";
 
 const PrivacyPolicy = () => {
   useEffect(() => {
@@ -19,6 +20,17 @@ const PrivacyPolicy = () => {
       m.content = desc;
       document.head.appendChild(m);
     }
+  }, []);
+
+  // Swap favicon for the privacy policy page only
+  useEffect(() => {
+    const link = document.querySelector<HTMLLinkElement>("link[rel~='icon']");
+    if (!link) return;
+    const previous = link.href;
+    link.href = "/favicon-circuito.png";
+    return () => {
+      link.href = previous;
+    };
   }, []);
 
   return (
