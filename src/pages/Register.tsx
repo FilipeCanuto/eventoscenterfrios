@@ -578,6 +578,17 @@ const Register = () => {
     trackPageView(event.id, payload);
   }, [event?.id]);
 
+  // Swap favicon for the registration page only
+  useEffect(() => {
+    const link = document.querySelector<HTMLLinkElement>("link[rel~='icon']");
+    if (!link) return;
+    const previous = link.href;
+    link.href = "/favicon-circuito.png";
+    return () => {
+      link.href = previous;
+    };
+  }, []);
+
   useEffect(() => {
     if (!event) return;
     const title = `Inscreva-se · ${event.name}`;
