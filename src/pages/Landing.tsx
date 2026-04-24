@@ -17,11 +17,11 @@ import {
   UserCheck,
 } from "lucide-react";
 
-import eventChill from "@/assets/event-chill-code-workshop.jpg";
-import eventHackathon from "@/assets/event-hackathon-ai.jpg";
-import eventJam from "@/assets/event-late-night-jam.jpg";
-import eventStartup from "@/assets/event-startup-weekend.jpg";
-import eventSummit from "@/assets/event-vibe-coding-summit.jpg";
+import eventChill from "@/assets/event-chill-code-workshop.webp";
+import eventHackathon from "@/assets/event-hackathon-ai.webp";
+import eventJam from "@/assets/event-late-night-jam.webp";
+import eventStartup from "@/assets/event-startup-weekend.webp";
+import eventSummit from "@/assets/event-vibe-coding-summit.webp";
 import avatarSarah from "@/assets/avatar-sarah.jpg";
 import avatarMarcus from "@/assets/avatar-marcus.jpg";
 import avatarPriya from "@/assets/avatar-priya.jpg";

@@ -1,4 +1,4 @@
-import centerfrios from "@/assets/centerfrios-logo.png";
+import centerfrios from "@/assets/centerfrios-logo.webp";
 
 interface LogoProps {
   size?: "sm" | "md" | "lg";
