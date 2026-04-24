@@ -155,10 +155,10 @@ const PrivacyPolicy = () => {
                 O participante poderá, a qualquer momento, solicitar a remoção
                 de fotos ou vídeos específicos enviando uma solicitação para{" "}
                 <a
-                  href="mailto:privacidade@centerfrios.com"
+                  href="mailto:adm@centerfrios.com"
                   className="text-primary underline underline-offset-2"
                 >
-                  privacidade@centerfrios.com
+                  adm@centerfrios.com
                 </a>
                 .
               </p>
@@ -199,10 +199,10 @@ const PrivacyPolicy = () => {
             <p>
               Para exercer esses direitos, entre em contato pelo e-mail{" "}
               <a
-                href="mailto:privacidade@centerfrios.com"
+                href="mailto:adm@centerfrios.com"
                 className="text-primary underline underline-offset-2"
               >
-                privacidade@centerfrios.com
+                adm@centerfrios.com
               </a>
               . Você também pode descadastrar-se dos lembretes por e-mail
               através do link presente em cada mensagem enviada.
@@ -246,10 +246,10 @@ const PrivacyPolicy = () => {
               <li>
                 E-mail:{" "}
                 <a
-                  href="mailto:privacidade@centerfrios.com"
+                  href="mailto:adm@centerfrios.com"
                   className="text-primary underline underline-offset-2"
                 >
-                  privacidade@centerfrios.com
+                  adm@centerfrios.com
                 </a>
               </li>
               <li>Site: centerfrios.com</li>
