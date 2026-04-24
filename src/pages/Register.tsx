@@ -645,7 +645,7 @@ const Register = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!consent) {
-      toast.error("Aceite a política de privacidade para se inscrever.");
+      toast.error("Aceite a Política de Privacidade e a autorização de uso de imagem para se inscrever.");
       return;
     }
     const missing = formFields?.filter(f => f.required && !formData[f.label]?.trim());
