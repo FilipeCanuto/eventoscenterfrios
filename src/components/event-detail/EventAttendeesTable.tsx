@@ -102,7 +102,7 @@ export default function EventAttendeesTable({ eventId }: { eventId: string }) {
 
   const handleExportCSV = () => {
     if (!filtered?.length) return;
-    const headers = ["Nome", "E-mail", "WhatsApp", "Status", "Origem", "Inscrição", "Check-in em"];
+    const headers = ["Nome", "E-mail", "WhatsApp", "Status", "Origem", "Dias", "Inscrição", "Check-in em"];
     const rows = filtered.map((r: any) => {
       const data = r.data as Record<string, string>;
       return [
@@ -111,6 +111,7 @@ export default function EventAttendeesTable({ eventId }: { eventId: string }) {
         r.lead_whatsapp || data["WhatsApp"] || data["Telefone"] || "",
         statusLabels[r.status] || r.status,
         getSource(r),
+        data["Dias de Comparecimento"] || "",
         format(new Date(r.created_at), "d MMM yyyy HH:mm", { locale: ptBR }),
         r.checked_in_at ? format(new Date(r.checked_in_at), "d MMM yyyy HH:mm", { locale: ptBR }) : "",
       ];
@@ -190,6 +191,7 @@ export default function EventAttendeesTable({ eventId }: { eventId: string }) {
                   <TableHead className="cursor-pointer select-none hidden md:table-cell" onClick={() => handleSort("source")}>
                     <span className="flex items-center">Origem <SortIcon col="source" /></span>
                   </TableHead>
+                  <TableHead className="hidden md:table-cell">Dias</TableHead>
                   <TableHead className="cursor-pointer select-none" onClick={() => handleSort("status")}>
                     <span className="flex items-center">Status <SortIcon col="status" /></span>
                   </TableHead>
@@ -211,6 +213,22 @@ export default function EventAttendeesTable({ eventId }: { eventId: string }) {
                       <TableCell className="hidden lg:table-cell text-sm text-muted-foreground">{r.lead_whatsapp || data["WhatsApp"] || data["Telefone"] || "—"}</TableCell>
                       <TableCell className="hidden md:table-cell">
                         <Badge variant="outline" className="text-xs rounded-full capitalize">{source}</Badge>
+                      </TableCell>
+                      <TableCell className="hidden md:table-cell">
+                        {data["Dias de Comparecimento"] ? (
+                          <div className="flex flex-wrap gap-1 max-w-[160px]">
+                            {data["Dias de Comparecimento"].split(", ").filter(Boolean).map((d) => {
+                              const short = (d.match(/\d{2}\/\d{2}/) || [d])[0];
+                              return (
+                                <Badge key={d} variant="secondary" className="text-[10px] rounded-full px-2 py-0">
+                                  {short}
+                                </Badge>
+                              );
+                            })}
+                          </div>
+                        ) : (
+                          <span className="text-muted-foreground/50 text-xs">—</span>
+                        )}
                       </TableCell>
                       <TableCell>
                         <Badge className={`${statusStyle[r.status] || ""} text-xs`}>{statusLabels[r.status] || r.status.replace("_", " ")}</Badge>
