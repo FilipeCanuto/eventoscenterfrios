@@ -411,11 +411,37 @@ const RegistrationForm = ({
       const value = formData[field.label] || "";
       const phoneInvalid = isPhone && field.required && value.length > 0 && !isValidBRPhone(value);
       const isSelect = field.field_type === "select";
+      const isMulti = field.field_type === "multiselect";
       const options = Array.isArray((field as any).options) ? ((field as any).options as string[]) : [];
+      const selectedMulti = isMulti ? value.split(", ").filter(Boolean) : [];
       return (
         <div key={field.id} className="space-y-2">
           <Label>{field.label}{field.required && " *"}</Label>
-          {isSelect ? (
+          {isMulti ? (
+            <div className="space-y-2 rounded-xl border border-input bg-background p-3">
+              {options.map((opt) => {
+                const checked = selectedMulti.includes(opt);
+                const id = `${field.id}-${opt}`;
+                return (
+                  <div key={opt} className="flex items-center gap-2">
+                    <Checkbox
+                      id={id}
+                      checked={checked}
+                      onCheckedChange={(c) => {
+                        const next = c
+                          ? [...selectedMulti, opt]
+                          : selectedMulti.filter((x) => x !== opt);
+                        // Preserve original option order
+                        const ordered = options.filter((o) => next.includes(o));
+                        onFieldChange(field.label, ordered.join(", "));
+                      }}
+                    />
+                    <Label htmlFor={id} className="text-sm cursor-pointer font-normal">{opt}</Label>
+                  </div>
+                );
+              })}
+            </div>
+          ) : isSelect ? (
             <Select
               value={value}
               onValueChange={(v) => onFieldChange(field.label, v)}
@@ -665,7 +691,12 @@ const Register = () => {
       toast.error("Aceite a Política de Privacidade e a autorização de uso de imagem para se inscrever.");
       return;
     }
-    const missing = formFields?.filter(f => f.required && !formData[f.label]?.trim());
+    const missing = formFields?.filter(f => {
+      if (!f.required) return false;
+      const v = formData[f.label]?.trim() || "";
+      if (f.field_type === "multiselect") return v.length === 0;
+      return !v;
+    });
     if (missing && missing.length > 0) {
       toast.error(`Preencha: ${missing.map(f => f.label).join(", ")}`);
       return;

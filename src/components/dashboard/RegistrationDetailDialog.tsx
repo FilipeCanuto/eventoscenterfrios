@@ -143,12 +143,24 @@ export default function RegistrationDetailDialog({ registration, onClose }: Prop
               <section className="space-y-2">
                 <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Dados do formulário</h4>
                 <div className="space-y-2.5 bg-muted/40 rounded-xl p-3">
-                  {visibleData.map(([key, value]) => (
-                    <div key={key} className="flex flex-col gap-0.5">
-                      <span className="text-xs text-muted-foreground">{key}</span>
-                      <span className="text-sm break-words">{typeof value === "string" ? value : JSON.stringify(value)}</span>
-                    </div>
-                  ))}
+                  {visibleData.map(([key, value]) => {
+                    const stringValue = typeof value === "string" ? value : JSON.stringify(value);
+                    const isDays = key === "Dias de Comparecimento" && stringValue.includes(",");
+                    return (
+                      <div key={key} className="flex flex-col gap-0.5">
+                        <span className="text-xs text-muted-foreground">{key}</span>
+                        {isDays ? (
+                          <div className="flex flex-wrap gap-1.5 mt-0.5">
+                            {stringValue.split(", ").filter(Boolean).map((d) => (
+                              <Badge key={d} variant="secondary" className="text-xs rounded-full">{d}</Badge>
+                            ))}
+                          </div>
+                        ) : (
+                          <span className="text-sm break-words">{stringValue}</span>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
               </section>
             )}

@@ -60,7 +60,7 @@ const EventDetail = () => {
   const handleAddField = async () => {
     if (!newFieldLabel.trim()) return;
     let options: string[] | null = null;
-    if (newFieldType === "select") {
+    if (newFieldType === "select" || newFieldType === "multiselect") {
       options = newFieldOptions.split("\n").map(o => o.trim()).filter(Boolean);
       if (options.length < 2) {
         toast.error("Adicione pelo menos 2 opções (uma por linha).");
@@ -169,7 +169,7 @@ const EventDetail = () => {
                   <div className="min-w-0">
                     <span className="text-sm font-medium">{field.label}</span>
                     <span className="text-xs text-muted-foreground ml-2">({field.field_type})</span>
-                    {field.field_type === "select" && Array.isArray((field as any).options) && (
+                    {(field.field_type === "select" || field.field_type === "multiselect") && Array.isArray((field as any).options) && (
                       <p className="text-xs text-muted-foreground mt-0.5 truncate">
                         Opções: {((field as any).options as string[]).join(", ")}
                       </p>
@@ -193,12 +193,13 @@ const EventDetail = () => {
                       <SelectItem value="email">E-mail</SelectItem>
                       <SelectItem value="tel">Telefone</SelectItem>
                       <SelectItem value="url">URL</SelectItem>
-                      <SelectItem value="select">Lista (dropdown)</SelectItem>
+                  <SelectItem value="select">Lista (dropdown)</SelectItem>
+                      <SelectItem value="multiselect">Caixas de seleção</SelectItem>
                     </SelectContent>
                   </Select>
                   <Button variant="outline" onClick={handleAddField} className="rounded-full">Adicionar</Button>
                 </div>
-                {newFieldType === "select" && (
+                {(newFieldType === "select" || newFieldType === "multiselect") && (
                   <Textarea
                     placeholder="Opções (uma por linha)&#10;Ex.:&#10;Supermercado&#10;Açougue&#10;Restaurante"
                     value={newFieldOptions}
