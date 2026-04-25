@@ -413,7 +413,7 @@ const RegistrationForm = ({
       const isSelect = field.field_type === "select";
       const isMulti = field.field_type === "multiselect";
       const options = Array.isArray((field as any).options) ? ((field as any).options as string[]) : [];
-      // Use Unit Separator (\u001F) internally so option labels containing ", " (e.g. "Terça, 05/05") don't collide with the delimiter.
+      // Use Unit Separator (\u001F) internally so option labels containing ", " (e.g. "Terça, 05/05/2026") don't collide with the delimiter.
       const MULTI_SEP = "\u001F";
       const selectedMulti = isMulti ? value.split(MULTI_SEP).filter(Boolean) : [];
       return (
