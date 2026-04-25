@@ -33,6 +33,43 @@ serve(async (req) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
     );
 
+    // ---- Catch-up: re-trigger missing confirmation emails ----
+    // Idempotent safety net for cases where the client never reached
+    // send-registration-confirmation (network drop, function cold-start 503,
+    // browser closed before the fire-and-forget fetch completed, etc.).
+    // The target function self-skips when tracking.confirmation_email_sent_at
+    // is already set, so re-invoking is safe.
+    let confirmationCatchUp = 0;
+    try {
+      const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+      const { data: missing } = await supabase
+        .from("registrations")
+        .select("id, tracking")
+        .gte("created_at", since)
+        .neq("status", "cancelled")
+        .not("lead_email", "is", null)
+        .limit(50);
+      const pending = (missing || []).filter((r: any) => {
+        const t = r.tracking || {};
+        return !t.confirmation_email_sent_at;
+      });
+      for (const r of pending) {
+        try {
+          await supabase.functions.invoke("send-registration-confirmation", {
+            body: { registrationId: r.id },
+          });
+          confirmationCatchUp++;
+        } catch (e) {
+          console.warn("[process-reminder-queue] catch-up failed", r.id, e);
+        }
+      }
+      if (confirmationCatchUp > 0) {
+        console.log("[process-reminder-queue] catch-up sent", confirmationCatchUp);
+      }
+    } catch (e) {
+      console.warn("[process-reminder-queue] catch-up scan failed", e);
+    }
+
     // Pull batch of due pending emails
     const { data: due, error: dueErr } = await supabase
       .from("scheduled_emails")

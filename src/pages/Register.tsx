@@ -748,13 +748,19 @@ const Register = () => {
                   context: (error as any).context,
                   data,
                 });
+                toast.warning(
+                  "Inscrição confirmada, mas não conseguimos enviar o e-mail agora. Tentaremos novamente em instantes.",
+                );
               } else {
                 console.log("[confirmation-email] invoke ok", data);
               }
             })
-            .catch((err) =>
-              console.error("[confirmation-email] invoke threw", err),
-            );
+            .catch((err) => {
+              console.error("[confirmation-email] invoke threw", err);
+              toast.warning(
+                "Inscrição confirmada, mas não conseguimos enviar o e-mail agora. Tentaremos novamente em instantes.",
+              );
+            });
         } else {
           console.warn("[confirmation-email] no registrationId returned, skipping");
         }
