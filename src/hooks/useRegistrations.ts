@@ -120,7 +120,7 @@ export function useCheckInRegistration() {
     mutationFn: async (id: string) => {
       const { error } = await supabase
         .from("registrations")
-        .update({ status: "checked_in" })
+        .update({ status: "checked_in", checked_in_at: new Date().toISOString() })
         .eq("id", id);
       if (error) throw error;
       return id;
@@ -130,6 +130,130 @@ export function useCheckInRegistration() {
       qc.invalidateQueries({ queryKey: ["registration-stats"] });
     },
   });
+}
+
+export function useRevertCheckIn() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase
+        .from("registrations")
+        .update({ status: "registered", checked_in_at: null })
+        .eq("id", id);
+      if (error) throw error;
+      return id;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["registrations"] });
+      qc.invalidateQueries({ queryKey: ["registration-stats"] });
+    },
+  });
+}
+
+export type RegistrationEdits = {
+  lead_name?: string | null;
+  lead_email?: string | null;
+  lead_whatsapp?: string | null;
+  data?: Record<string, string>;
+};
+
+export function useUpdateRegistration() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      id,
+      current,
+      edits,
+    }: {
+      id: string;
+      current: Tables<"registrations">;
+      edits: RegistrationEdits;
+    }) => {
+      const prevTracking = (current.tracking || {}) as Record<string, any>;
+      const prevData = (current.data || {}) as Record<string, string>;
+
+      const newName = edits.lead_name !== undefined ? edits.lead_name : current.lead_name;
+      const newEmail = edits.lead_email !== undefined ? edits.lead_email : current.lead_email;
+      const newWhats = edits.lead_whatsapp !== undefined ? edits.lead_whatsapp : current.lead_whatsapp;
+      const mergedData = edits.data ? { ...prevData, ...edits.data } : prevData;
+
+      // Track which fields were edited
+      const changedFields: string[] = [];
+      if (edits.lead_name !== undefined && (current.lead_name || "") !== (newName || "")) changedFields.push("lead_name");
+      if (edits.lead_email !== undefined && (current.lead_email || "").toLowerCase() !== (newEmail || "").toLowerCase()) changedFields.push("lead_email");
+      if (edits.lead_whatsapp !== undefined && (current.lead_whatsapp || "") !== (newWhats || "")) changedFields.push("lead_whatsapp");
+      if (edits.data) {
+        Object.keys(edits.data).forEach((k) => {
+          if ((prevData[k] || "") !== (edits.data![k] || "")) changedFields.push(`data.${k}`);
+        });
+      }
+
+      const emailChanged = changedFields.includes("lead_email");
+      const editEntry = {
+        at: new Date().toISOString(),
+        fields: changedFields,
+      };
+
+      const newTracking: Record<string, any> = {
+        ...prevTracking,
+        edits: [...((prevTracking.edits as any[]) || []), editEntry],
+      };
+      // Force re-send when email changes
+      if (emailChanged) {
+        delete newTracking.confirmation_email_sent_at;
+      }
+
+      const { error } = await supabase
+        .from("registrations")
+        .update({
+          lead_name: newName,
+          lead_email: newEmail,
+          lead_whatsapp: newWhats,
+          data: mergedData as unknown as Json,
+          tracking: newTracking as unknown as Json,
+        })
+        .eq("id", id);
+      if (error) throw error;
+
+      const wasSent = !!prevTracking.confirmation_email_sent_at;
+      const shouldSendConfirmation = emailChanged || !wasSent;
+
+      return { id, changedFields, emailChanged, shouldSendConfirmation };
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["registrations"] });
+      qc.invalidateQueries({ queryKey: ["registration-stats"] });
+    },
+  });
+}
+
+export function useResendConfirmation() {
+  return useMutation({
+    mutationFn: async (registrationId: string) => {
+      const { data, error } = await supabase.functions.invoke("send-registration-confirmation", {
+        body: { registrationId, force: true },
+      });
+      if (error) throw error;
+      return data;
+    },
+  });
+}
+
+export async function checkDuplicateEmailForEvent(eventId: string, email: string, excludeId: string): Promise<number> {
+  const target = email.trim().toLowerCase();
+  if (!target) return 0;
+  const { data, error } = await supabase
+    .from("registrations")
+    .select("id, lead_email, status, data")
+    .eq("event_id", eventId)
+    .neq("id", excludeId)
+    .neq("status", "cancelled");
+  if (error) return 0;
+  return (data || []).filter((r: any) => {
+    const d = (r.data || {}) as Record<string, string>;
+    const e = (r.lead_email || d["Endereço de E-mail"] || d["E-mail"] || d["Email Address"] || d["Email"] || "").toString().trim().toLowerCase();
+    return e === target;
+  }).length;
 }
 
 export function useRegistrationStats() {
