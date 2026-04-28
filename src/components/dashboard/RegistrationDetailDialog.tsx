@@ -3,7 +3,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -285,6 +285,9 @@ export default function RegistrationDetailDialog({ registration, onClose }: Prop
                 {statusLabels[registration.status] || registration.status}
               </Badge>
             </DialogTitle>
+            <DialogDescription className="sr-only">
+              Visualize, edite ou gerencie os dados deste participante.
+            </DialogDescription>
           </DialogHeader>
 
           <div className="space-y-5">
