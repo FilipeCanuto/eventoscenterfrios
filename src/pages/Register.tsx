@@ -16,6 +16,32 @@ import { Tables } from "@/integrations/supabase/types";
 import { supabase } from "@/integrations/supabase/client";
 import confetti from "canvas-confetti";
 import { trackPageView, buildInitialPayload } from "@/lib/visitorTracking";
+import { useIsMobile } from "@/hooks/use-mobile";
+
+// Regex simples para validação de e-mail (mais estrita do que `type="email"`).
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+
+// Wrapper seguro para o canvas-confetti — em alguns in-app browsers
+// (Instagram/WhatsApp/Facebook Android, Safari iOS antigo) a chamada pode
+// lançar e derrubar a página de sucesso. Falhar silenciosamente é OK.
+function safeConfetti(opts: confetti.Options) {
+  try {
+    if (typeof confetti === "function") confetti(opts);
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.warn("[confetti] skipped", err);
+  }
+}
+
+// Detecta auto-complete apropriado pelo label do campo (mobile-first).
+function autoCompleteFor(label: string): string | undefined {
+  const l = label.toLowerCase();
+  if (l.includes("e-mail") || l.includes("email")) return "email";
+  if (l.includes("whatsapp") || l.includes("celular") || l.includes("telefone")) return "tel";
+  if (l.includes("nome")) return "name";
+  if (l.includes("empresa") || l.includes("company")) return "organization";
+  return undefined;
+}
 
 type FormField = Tables<"form_fields">;
 
