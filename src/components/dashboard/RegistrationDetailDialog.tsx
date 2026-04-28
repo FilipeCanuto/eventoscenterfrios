@@ -118,15 +118,13 @@ export default function RegistrationDetailDialog({ registration, onClose }: Prop
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [registration?.id]);
 
-  if (!registration) return null;
+  const tracking = registration ? getTracking(registration) : {};
+  const eventName = (registration as any)?.events?.name as string | undefined;
+  const confirmationSentAt = ((registration as any)?.tracking?.confirmation_email_sent_at as string) || null;
 
-  const tracking = getTracking(registration);
-  const eventName = (registration as any).events?.name as string | undefined;
-  const confirmationSentAt = ((registration as any).tracking?.confirmation_email_sent_at as string) || null;
-
-  const originalEmail = getEmail(registration);
-  const originalName = getName(registration) === "—" ? "" : getName(registration);
-  const originalWhats = getWhatsapp(registration);
+  const originalEmail = registration ? getEmail(registration) : "";
+  const originalName = registration ? (getName(registration) === "—" ? "" : getName(registration)) : "";
+  const originalWhats = registration ? getWhatsapp(registration) : "";
 
   const emailValid = !email || EMAIL_RE.test(email.trim());
   const whatsValid = !whatsapp || onlyDigits(whatsapp).length >= 10;
@@ -142,7 +140,7 @@ export default function RegistrationDetailDialog({ registration, onClose }: Prop
 
   // Live duplicate-email check
   useEffect(() => {
-    if (!editing || !email || !emailValid) { setDuplicateWarning(null); return; }
+    if (!registration || !editing || !email || !emailValid) { setDuplicateWarning(null); return; }
     if (email.trim().toLowerCase() === originalEmail.toLowerCase()) { setDuplicateWarning(null); return; }
     let cancelled = false;
     const t = setTimeout(async () => {
@@ -157,7 +155,9 @@ export default function RegistrationDetailDialog({ registration, onClose }: Prop
       }
     }, 350);
     return () => { cancelled = true; clearTimeout(t); };
-  }, [editing, email, emailValid, originalEmail, registration.event_id, registration.id]);
+  }, [editing, email, emailValid, originalEmail, registration?.event_id, registration?.id]);
+
+  if (!registration) return null;
 
   const waLink = whatsapp ? `https://wa.me/${onlyDigits(whatsapp)}` : null;
   const mailLink = email ? `mailto:${email}` : null;
