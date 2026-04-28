@@ -698,6 +698,7 @@ const Register = () => {
     const url = typeof window !== "undefined" ? window.location.href : "";
     const canonical = typeof window !== "undefined" ? window.location.origin + window.location.pathname : "";
 
+    const previousTitle = document.title;
     document.title = title;
 
     const setMeta = (selector: string, attr: "name" | "property", key: string, content: string) => {
