@@ -851,6 +851,8 @@ const Register = () => {
       setSubmitted(true);
     } catch (err: any) {
       toast.error(err.message || "Falha na inscrição");
+    } finally {
+      submittingRef.current = false;
     }
   };
 
