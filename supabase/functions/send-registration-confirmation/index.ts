@@ -91,7 +91,7 @@ serve(async (req) => {
     }
 
     const tracking = (reg.tracking as Record<string, unknown>) || {};
-    if (tracking.confirmation_email_sent_at) {
+    if (tracking.confirmation_email_sent_at && !body.force) {
       console.log("[send-registration-confirmation] Already sent, skipping", body.registrationId);
       return new Response(JSON.stringify({ ok: true, alreadySent: true }), {
         status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" },
