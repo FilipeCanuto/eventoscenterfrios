@@ -756,6 +756,9 @@ const Register = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    // Anti duplo-tap em mobile: bloqueia chamadas concorrentes mesmo antes
+    // do isPending propagar via React state.
+    if (submittingRef.current || createReg.isPending) return;
     if (!consent) {
       toast.error("Aceite a Política de Privacidade e a autorização de uso de imagem para se inscrever.");
       return;
@@ -775,6 +778,17 @@ const Register = () => {
       toast.error("Informe um WhatsApp válido com DDD (ex.: (11) 99999-9999).");
       return;
     }
+    const invalidEmail = formFields?.find(f => {
+      const isEmailField = f.field_type === "email" || /e-?mail/i.test(f.label);
+      if (!isEmailField || !f.required) return false;
+      const v = (formData[f.label] || "").trim();
+      return !EMAIL_RE.test(v);
+    });
+    if (invalidEmail) {
+      toast.error("Informe um e-mail válido (ex.: voce@email.com).");
+      return;
+    }
+    submittingRef.current = true;
     try {
       const utms = utmsRef.current || {};
       // Normalize multiselect fields from internal "\u001F" separator to a human-readable ", " before persisting.
