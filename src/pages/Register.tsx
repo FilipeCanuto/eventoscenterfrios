@@ -730,6 +730,9 @@ const Register = () => {
       document.head.appendChild(link);
     }
     link.setAttribute("href", canonical);
+    return () => {
+      document.title = previousTitle;
+    };
   }, [event]);
 
   const seoHead = null;
