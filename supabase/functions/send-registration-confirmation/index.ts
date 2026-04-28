@@ -16,6 +16,7 @@ const UNSUBSCRIBE_MAILTO = "contato@eventos.centerfrios.com";
 interface Payload {
   registrationId: string;
   origin?: string | null;
+  force?: boolean;
 }
 
 serve(async (req) => {
