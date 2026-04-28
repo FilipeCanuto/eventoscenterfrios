@@ -421,8 +421,12 @@ const RegistrationForm = ({
   brandColor: string;
   urgencyText?: string;
   className?: string;
-}) => (
-  <form onSubmit={onSubmit} className={`space-y-4 ${className}`}>
+}) => {
+  // Mobile-first: usa <select> HTML nativo no celular para evitar bugs do
+  // Radix Portal em Android WebViews antigos / in-app browsers.
+  const isMobile = useIsMobile();
+  return (
+  <form onSubmit={onSubmit} className={`space-y-4 ${className}`} noValidate>
     {urgencyText && (
       <div
       className="flex items-center gap-2 rounded-full px-3 py-2 text-xs font-medium border-secondary-foreground bg-blue-200"
@@ -434,17 +438,20 @@ const RegistrationForm = ({
     )}
     {formFields?.map((field) => {
       const isPhone = isWhatsAppField(field.label);
+      const isEmail = field.field_type === "email" || /e-?mail/i.test(field.label);
       const value = formData[field.label] || "";
       const phoneInvalid = isPhone && field.required && value.length > 0 && !isValidBRPhone(value);
+      const emailInvalid = isEmail && field.required && value.length > 0 && !EMAIL_RE.test(value.trim());
       const isSelect = field.field_type === "select";
       const isMulti = field.field_type === "multiselect";
       const options = Array.isArray((field as any).options) ? ((field as any).options as string[]) : [];
-      // Use Unit Separator (\u001F) internally so option labels containing ", " (e.g. "Terça, 05/05/2026") don't collide with the delimiter.
       const MULTI_SEP = "\u001F";
       const selectedMulti = isMulti ? value.split(MULTI_SEP).filter(Boolean) : [];
+      const ac = autoCompleteFor(field.label);
+      const fieldId = `field-${field.id}`;
       return (
         <div key={field.id} className="space-y-2">
-          <Label>{field.label}{field.required && " *"}</Label>
+          <Label htmlFor={fieldId}>{field.label}{field.required && " *"}</Label>
           {isMulti ? (
             <div className="space-y-2 rounded-xl border border-input bg-background p-3">
               {options.map((opt) => {
@@ -459,7 +466,6 @@ const RegistrationForm = ({
                         const next = c
                           ? [...selectedMulti, opt]
                           : selectedMulti.filter((x) => x !== opt);
-                        // Preserve original option order
                         const ordered = options.filter((o) => next.includes(o));
                         onFieldChange(field.label, ordered.join(MULTI_SEP));
                       }}
@@ -470,35 +476,68 @@ const RegistrationForm = ({
               })}
             </div>
           ) : isSelect ? (
-            <Select
-              value={value}
-              onValueChange={(v) => onFieldChange(field.label, v)}
-            >
-              <SelectTrigger className="h-12 text-base rounded-md" style={{ fontSize: "16px" }}>
-                <SelectValue placeholder={field.placeholder || `Selecione ${field.label.toLowerCase()}`} />
-              </SelectTrigger>
-              <SelectContent>
+            isMobile ? (
+              // Select nativo no mobile: 100% compatível com qualquer navegador,
+              // abre roleta no iOS / drawer no Android, sem risco de Portal/transform.
+              <select
+                id={fieldId}
+                value={value}
+                required={field.required}
+                onChange={(e) => onFieldChange(field.label, e.target.value)}
+                className="flex h-12 w-full items-center rounded-md border border-input bg-background px-3 py-2 text-base ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 appearance-none bg-no-repeat bg-right pr-10"
+                style={{
+                  fontSize: "16px",
+                  backgroundImage:
+                    "url(\"data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'/%3e%3c/svg%3e\")",
+                  backgroundPosition: "right 12px center",
+                }}
+              >
+                <option value="" disabled>
+                  {field.placeholder || `Selecione ${field.label.toLowerCase()}`}
+                </option>
                 {options.map((opt) => (
-                  <SelectItem key={opt} value={opt}>{opt}</SelectItem>
+                  <option key={opt} value={opt}>{opt}</option>
                 ))}
-              </SelectContent>
-            </Select>
+              </select>
+            ) : (
+              <Select
+                value={value}
+                onValueChange={(v) => onFieldChange(field.label, v)}
+              >
+                <SelectTrigger id={fieldId} className="h-12 text-base rounded-md" style={{ fontSize: "16px" }}>
+                  <SelectValue placeholder={field.placeholder || `Selecione ${field.label.toLowerCase()}`} />
+                </SelectTrigger>
+                <SelectContent>
+                  {options.map((opt) => (
+                    <SelectItem key={opt} value={opt}>{opt}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )
           ) : (
             <>
               <Input
-                type={field.field_type === "email" ? "email" : isPhone ? "tel" : field.field_type === "tel" ? "tel" : "text"}
-                inputMode={isPhone ? "tel" : undefined}
+                id={fieldId}
+                type={isEmail ? "email" : isPhone ? "tel" : field.field_type === "tel" ? "tel" : "text"}
+                inputMode={isPhone ? "tel" : isEmail ? "email" : undefined}
+                autoComplete={ac}
+                autoCapitalize={isEmail || isPhone ? "none" : undefined}
+                autoCorrect={isEmail || isPhone ? "off" : undefined}
+                spellCheck={isEmail || isPhone ? false : undefined}
                 placeholder={isPhone ? "(11) 99999-9999" : field.placeholder || field.label}
                 required={field.required}
                 value={value}
                 onChange={e => onFieldChange(field.label, isPhone ? maskBRPhone(e.target.value) : e.target.value)}
                 onBlur={e => onFieldBlur?.(field.label, e.target.value)}
-                aria-invalid={phoneInvalid || undefined}
+                aria-invalid={phoneInvalid || emailInvalid || undefined}
                 className="h-12 text-base"
                 style={{ fontSize: "16px" }}
               />
               {phoneInvalid && (
                 <p className="text-xs text-destructive">Informe um WhatsApp válido com DDD, ex.: (11) 99999-9999.</p>
+              )}
+              {emailInvalid && (
+                <p className="text-xs text-destructive">Informe um e-mail válido, ex.: voce@email.com.</p>
               )}
             </>
           )}
