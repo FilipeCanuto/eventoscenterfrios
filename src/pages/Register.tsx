@@ -181,7 +181,7 @@ const SuccessCard = ({
   useEffect(() => {
     const colors = [brandColor, "#FFD166", "#06D6A0", "#118AB2", "#EF476F"];
     const fire = (delay: number, opts: confetti.Options) => {
-      setTimeout(() => confetti({ colors, ...opts }), delay);
+      setTimeout(() => safeConfetti({ colors, ...opts }), delay);
     };
     fire(0, { particleCount: 120, spread: 80, origin: { y: 0.6 } });
     fire(250, { particleCount: 80, angle: 60, spread: 60, origin: { x: 0, y: 0.7 } });
