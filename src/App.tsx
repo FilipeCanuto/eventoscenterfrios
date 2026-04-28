@@ -1,4 +1,6 @@
 import { useEffect, lazy, Suspense } from "react";
+import { Loader2 } from "lucide-react";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -48,7 +50,14 @@ const App = () => (
           <Sonner />
           <BrowserRouter>
             <ScrollToTop />
-            <Suspense fallback={null}>
+            <ErrorBoundary>
+              <Suspense
+                fallback={
+                  <div className="min-h-screen flex items-center justify-center">
+                    <Loader2 className="w-8 h-8 animate-spin text-primary" />
+                  </div>
+                }
+              >
               <Routes>
                 {/* Public */}
                 <Route path="/" element={<Landing />} />
@@ -81,7 +90,8 @@ const App = () => (
 
                 <Route path="*" element={<NotFound />} />
               </Routes>
-            </Suspense>
+              </Suspense>
+            </ErrorBoundary>
           </BrowserRouter>
         </TooltipProvider>
       </AuthProvider>
