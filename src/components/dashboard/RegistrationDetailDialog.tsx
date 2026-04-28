@@ -97,7 +97,7 @@ export default function RegistrationDetailDialog({ registration, onClose }: Prop
   const resendMut = useResendConfirmation();
 
   const data = (registration?.data || {}) as Record<string, string>;
-  const visibleData = Object.entries(data).filter(([k]) =>
+  const visibleData = Object.entries(data).filter(([k]: [string, unknown]) =>
     !k.startsWith("__") &&
     !NAME_KEYS.includes(k) &&
     !EMAIL_KEYS.includes(k) &&
