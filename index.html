@@ -35,7 +35,16 @@
 </head>
 
   <body>
-    <div id="root"></div>
+    <div id="root">
+      <!-- Critical above-the-fold content for fast LCP. Replaced by React on hydration. -->
+      <div style="min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px;background:hsl(0,0%,98%);">
+        <div style="max-width:1280px;width:100%;text-align:center;">
+          <h1 style="font-family:'Bricolage Grotesque',system-ui,sans-serif;font-weight:700;font-size:clamp(2.25rem,5vw,3.5rem);line-height:1.15;letter-spacing:-0.02em;color:hsl(240,30%,14%);margin:0 auto;max-width:42ch;">
+            A central oficial da CENTERFRIOS que impulsiona comunidades.
+          </h1>
+        </div>
+      </div>
+    </div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
