@@ -611,6 +611,7 @@ const Register = () => {
   const [submitted, setSubmitted] = useState(false);
   const utmsRef = useRef<Record<string, string>>({});
   const formStartedRef = useRef(false);
+  const submittingRef = useRef(false);
   const lastTrackedRef = useRef<{ email?: string; name?: string; whatsapp?: string }>({});
 
   useEffect(() => {
