@@ -18,7 +18,7 @@ import { Tables } from "@/integrations/supabase/types";
 import { supabase } from "@/integrations/supabase/client";
 import confetti from "canvas-confetti";
 import { trackPageView, buildInitialPayload } from "@/lib/visitorTracking";
-import { useIsMobile } from "@/hooks/use-mobile";
+
 
 // Regex simples para validação de e-mail (mais estrita do que `type="email"`).
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
