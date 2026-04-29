@@ -67,15 +67,22 @@ const CheckIn = () => {
     const colors = [brand, "#ffffff", "#FFD166", "#06D6A0"];
 
     const burst = (origin: { x: number; y: number }, particleCount = 80) => {
-      confetti({
-        particleCount,
-        spread: 75,
-        startVelocity: 45,
-        origin,
-        colors,
-        scalar: 1.1,
-        ticks: 220,
-      });
+      try {
+        confetti({
+          particleCount,
+          spread: 75,
+          startVelocity: 45,
+          origin,
+          colors,
+          scalar: 1.1,
+          ticks: 220,
+        });
+      } catch (err) {
+        // Em alguns in-app browsers (WhatsApp/Instagram) ou devices com canvas
+        // restrito o confetti pode lançar — falhar silenciosamente preserva a UI.
+        // eslint-disable-next-line no-console
+        console.warn("[confetti] skipped", err);
+      }
     };
 
     const t1 = setTimeout(() => burst({ x: 0.5, y: 0.4 }, 110), 200);
