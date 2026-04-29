@@ -14,6 +14,63 @@ export type Database = {
   }
   public: {
     Tables: {
+      email_send_log: {
+        Row: {
+          created_at: string
+          email_type: string
+          error_message: string | null
+          id: string
+          provider_status: number | null
+          recipient_email: string | null
+          registration_id: string | null
+          status: string
+        }
+        Insert: {
+          created_at?: string
+          email_type: string
+          error_message?: string | null
+          id?: string
+          provider_status?: number | null
+          recipient_email?: string | null
+          registration_id?: string | null
+          status: string
+        }
+        Update: {
+          created_at?: string
+          email_type?: string
+          error_message?: string | null
+          id?: string
+          provider_status?: number | null
+          recipient_email?: string | null
+          registration_id?: string | null
+          status?: string
+        }
+        Relationships: []
+      }
+      email_send_state: {
+        Row: {
+          cooldown_until: string | null
+          id: number
+          last_provider_error: string | null
+          last_provider_status: number | null
+          updated_at: string
+        }
+        Insert: {
+          cooldown_until?: string | null
+          id?: number
+          last_provider_error?: string | null
+          last_provider_status?: number | null
+          updated_at?: string
+        }
+        Update: {
+          cooldown_until?: string | null
+          id?: number
+          last_provider_error?: string | null
+          last_provider_status?: number | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
       email_templates: {
         Row: {
           body: string
@@ -437,6 +494,27 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      suppressed_emails: {
+        Row: {
+          created_at: string
+          email: string
+          reason: string
+          source: string | null
+        }
+        Insert: {
+          created_at?: string
+          email: string
+          reason: string
+          source?: string | null
+        }
+        Update: {
+          created_at?: string
+          email?: string
+          reason?: string
+          source?: string | null
+        }
+        Relationships: []
       }
       user_roles: {
         Row: {
