@@ -33,6 +33,35 @@ serve(async (req) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
     );
 
+    // ─── Cooldown global ──────────────────────────────────────────────
+    // Se o provedor está em erro de configuração (ex.: domínio não
+    // verificado), não geramos rajada de tentativas. Apenas reportamos.
+    try {
+      const { data: state } = await supabase
+        .from("email_send_state")
+        .select("cooldown_until,last_provider_status")
+        .eq("id", 1)
+        .maybeSingle();
+      if (state?.cooldown_until && new Date(state.cooldown_until as string) > new Date()) {
+        console.warn("[process-reminder-queue] in cooldown, skipping cycle", state.cooldown_until);
+        return new Response(
+          JSON.stringify({ ok: true, skipped: true, reason: "cooldown", until: state.cooldown_until }),
+          { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+        );
+      }
+    } catch (e) {
+      console.warn("[process-reminder-queue] cooldown check failed", e);
+    }
+
+    // Pré-carrega lista de e-mails suprimidos para evitar reenvio.
+    let suppressedSet = new Set<string>();
+    try {
+      const { data: sup } = await supabase.from("suppressed_emails").select("email");
+      suppressedSet = new Set((sup || []).map((r: any) => (r.email || "").toLowerCase()));
+    } catch (e) {
+      console.warn("[process-reminder-queue] suppression load failed", e);
+    }
+
     // ---- Catch-up: re-trigger missing confirmation emails ----
     // Idempotent safety net for cases where the client never reached
     // send-registration-confirmation (network drop, function cold-start 503,
@@ -44,16 +73,19 @@ serve(async (req) => {
       const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
       const { data: missing } = await supabase
         .from("registrations")
-        .select("id, tracking")
+        .select("id, lead_email, tracking")
         .gte("created_at", since)
         .neq("status", "cancelled")
         .not("lead_email", "is", null)
         .limit(50);
       const pending = (missing || []).filter((r: any) => {
         const t = r.tracking || {};
-        return !t.confirmation_email_sent_at;
+        if (t.confirmation_email_sent_at) return false;
+        const e = (r.lead_email || "").toLowerCase();
+        return e && !suppressedSet.has(e);
       });
-      for (const r of pending) {
+      // Limita o catch-up para não gerar rajada se houver backlog grande.
+      for (const r of pending.slice(0, 10)) {
         try {
           await supabase.functions.invoke("send-registration-confirmation", {
             body: { registrationId: r.id },
