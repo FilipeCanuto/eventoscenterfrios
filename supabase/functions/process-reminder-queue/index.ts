@@ -33,6 +33,35 @@ serve(async (req) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
     );
 
+    // ─── Cooldown global ──────────────────────────────────────────────
+    // Se o provedor está em erro de configuração (ex.: domínio não
+    // verificado), não geramos rajada de tentativas. Apenas reportamos.
+    try {
+      const { data: state } = await supabase
+        .from("email_send_state")
+        .select("cooldown_until,last_provider_status")
+        .eq("id", 1)
+        .maybeSingle();
+      if (state?.cooldown_until && new Date(state.cooldown_until as string) > new Date()) {
+        console.warn("[process-reminder-queue] in cooldown, skipping cycle", state.cooldown_until);
+        return new Response(
+          JSON.stringify({ ok: true, skipped: true, reason: "cooldown", until: state.cooldown_until }),
+          { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+        );
+      }
+    } catch (e) {
+      console.warn("[process-reminder-queue] cooldown check failed", e);
+    }
+
+    // Pré-carrega lista de e-mails suprimidos para evitar reenvio.
+    let suppressedSet = new Set<string>();
+    try {
+      const { data: sup } = await supabase.from("suppressed_emails").select("email");
+      suppressedSet = new Set((sup || []).map((r: any) => (r.email || "").toLowerCase()));
+    } catch (e) {
+      console.warn("[process-reminder-queue] suppression load failed", e);
+    }
+
     // ---- Catch-up: re-trigger missing confirmation emails ----
     // Idempotent safety net for cases where the client never reached
     // send-registration-confirmation (network drop, function cold-start 503,
@@ -44,16 +73,19 @@ serve(async (req) => {
       const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
       const { data: missing } = await supabase
         .from("registrations")
-        .select("id, tracking")
+        .select("id, lead_email, tracking")
         .gte("created_at", since)
         .neq("status", "cancelled")
         .not("lead_email", "is", null)
         .limit(50);
       const pending = (missing || []).filter((r: any) => {
         const t = r.tracking || {};
-        return !t.confirmation_email_sent_at;
+        if (t.confirmation_email_sent_at) return false;
+        const e = (r.lead_email || "").toLowerCase();
+        return e && !suppressedSet.has(e);
       });
-      for (const r of pending) {
+      // Limita o catch-up para não gerar rajada se houver backlog grande.
+      for (const r of pending.slice(0, 10)) {
         try {
           await supabase.functions.invoke("send-registration-confirmation", {
             body: { registrationId: r.id },
@@ -112,6 +144,15 @@ serve(async (req) => {
           continue;
         }
 
+        const recipientEmail = (reg.lead_email || "").trim().toLowerCase();
+        if (suppressedSet.has(recipientEmail)) {
+          await supabase.from("scheduled_emails")
+            .update({ status: "cancelled", error: "recipient_suppressed" })
+            .eq("id", item.id);
+          skipped++;
+          continue;
+        }
+
         const ev = (reg as any).events;
         if (!ev) {
           await supabase.from("scheduled_emails")
@@ -156,14 +197,58 @@ serve(async (req) => {
 
         const respBody = await resp.text();
         if (!resp.ok) {
+          const lower = respBody.toLowerCase();
+          const isDomainConfigError =
+            resp.status === 401 || resp.status === 403 ||
+            lower.includes("not verified") || lower.includes("validation_error");
+          const isInvalidRecipient =
+            resp.status === 422 ||
+            lower.includes("invalid `to`") || lower.includes("invalid email");
+
+          if (isDomainConfigError) {
+            try {
+              await supabase.from("email_send_state").upsert({
+                id: 1,
+                cooldown_until: new Date(Date.now() + 30 * 60 * 1000).toISOString(),
+                last_provider_status: resp.status,
+                last_provider_error: respBody.slice(0, 500),
+                updated_at: new Date().toISOString(),
+              });
+            } catch (_) { /* noop */ }
+          }
+          if (isInvalidRecipient) {
+            try {
+              await supabase.from("suppressed_emails").upsert({
+                email: recipientEmail,
+                reason: "invalid_recipient",
+                source: "process-reminder-queue",
+              });
+              suppressedSet.add(recipientEmail);
+            } catch (_) { /* noop */ }
+          }
+
           const newAttempts = (item.attempts || 0) + 1;
-          const status = newAttempts >= 3 ? "failed" : "pending";
+          // Em erro de domínio, marcamos como failed direto para não reenfileirar.
+          const status = isDomainConfigError || isInvalidRecipient
+            ? "failed"
+            : (newAttempts >= 3 ? "failed" : "pending");
           await supabase.from("scheduled_emails").update({
             attempts: newAttempts,
             status,
             error: `provider_${resp.status}: ${respBody.slice(0, 200)}`,
           }).eq("id", item.id);
+
+          await supabase.from("email_send_log").insert({
+            registration_id: reg.id,
+            email_type: item.email_type,
+            recipient_email: recipientEmail,
+            status: "failed",
+            provider_status: resp.status,
+            error_message: respBody.slice(0, 500),
+          });
+
           failed++;
+          if (isDomainConfigError) break; // aborta o ciclo
           continue;
         }
 
@@ -172,6 +257,13 @@ serve(async (req) => {
           sent_at: new Date().toISOString(),
           error: null,
         }).eq("id", item.id);
+        await supabase.from("email_send_log").insert({
+          registration_id: reg.id,
+          email_type: item.email_type,
+          recipient_email: recipientEmail,
+          status: "sent",
+          provider_status: resp.status,
+        });
         sent++;
       } catch (e) {
         console.error("[process-reminder-queue] item error", item.id, e);

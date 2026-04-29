@@ -3,7 +3,10 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Checkbox } from "@/components/ui/checkbox";
+// Checkbox Radix removido propositalmente do fluxo público: usamos
+// <input type="checkbox"> nativo para máxima compatibilidade em
+// in-app browsers (WhatsApp/Instagram/Facebook), Android WebView e
+// extensões de tradução automática.
 // Radix Select removido propositalmente: o fluxo público usa <select> nativo
 // em todos os dispositivos para evitar crashes de Portal/hydration em
 // in-app browsers (WhatsApp/Instagram), Android WebView e Google Translate.
@@ -22,6 +25,43 @@ import { trackPageView, buildInitialPayload } from "@/lib/visitorTracking";
 
 // Regex simples para validação de e-mail (mais estrita do que `type="email"`).
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+
+// Sugestão de correção para domínios mais comuns escritos errado.
+// Reduz drasticamente bounces "invalid recipient" no Resend.
+const EMAIL_DOMAIN_TYPOS: Record<string, string> = {
+  "gmial.com": "gmail.com",
+  "gmal.com": "gmail.com",
+  "gmai.com": "gmail.com",
+  "gmail.co": "gmail.com",
+  "gmail.con": "gmail.com",
+  "gnail.com": "gmail.com",
+  "hotnail.com": "hotmail.com",
+  "hotmial.com": "hotmail.com",
+  "hotmai.com": "hotmail.com",
+  "hotmail.con": "hotmail.com",
+  "hotmail.co": "hotmail.com",
+  "outlok.com": "outlook.com",
+  "outloo.com": "outlook.com",
+  "outlook.con": "outlook.com",
+  "yaho.com": "yahoo.com",
+  "yahho.com": "yahoo.com",
+  "yahoo.con": "yahoo.com",
+  "icloud.con": "icloud.com",
+  "iclod.com": "icloud.com",
+  "uol.com": "uol.com.br",
+  "bol.com": "bol.com.br",
+};
+
+function suggestEmailFix(email: string): string | null {
+  const v = (email || "").trim().toLowerCase();
+  const at = v.lastIndexOf("@");
+  if (at < 1) return null;
+  const local = v.slice(0, at);
+  const domain = v.slice(at + 1);
+  const fixed = EMAIL_DOMAIN_TYPOS[domain];
+  if (!fixed || fixed === domain) return null;
+  return `${local}@${fixed}`;
+}
 
 // Wrapper seguro para o canvas-confetti — em alguns in-app browsers
 // (Instagram/WhatsApp/Facebook Android, Safari iOS antigo) a chamada pode
@@ -457,20 +497,27 @@ const RegistrationForm = ({
                 const checked = selectedMulti.includes(opt);
                 const id = `${field.id}-${opt}`;
                 return (
-                  <div key={opt} className="flex items-center gap-2">
-                    <Checkbox
+                  <label
+                    key={opt}
+                    htmlFor={id}
+                    className="flex items-center gap-3 cursor-pointer min-h-11 py-1"
+                  >
+                    <input
                       id={id}
+                      type="checkbox"
                       checked={checked}
-                      onCheckedChange={(c) => {
+                      onChange={(e) => {
+                        const c = e.target.checked;
                         const next = c
                           ? [...selectedMulti, opt]
                           : selectedMulti.filter((x) => x !== opt);
                         const ordered = options.filter((o) => next.includes(o));
                         onFieldChange(field.label, ordered.join(MULTI_SEP));
                       }}
+                      className="h-5 w-5 rounded border-input accent-primary shrink-0"
                     />
-                    <Label htmlFor={id} className="text-sm cursor-pointer font-normal">{opt}</Label>
-                  </div>
+                    <span className="text-sm font-normal">{opt}</span>
+                  </label>
                 );
               })}
             </div>
@@ -529,7 +576,13 @@ const RegistrationForm = ({
       );
     })}
     <div className="flex items-start gap-2 pt-2">
-      <Checkbox id="gdpr" checked={consent} onCheckedChange={(c) => onConsentChange(!!c)} className="mt-0.5" />
+      <input
+        id="gdpr"
+        type="checkbox"
+        checked={consent}
+        onChange={(e) => onConsentChange(e.target.checked)}
+        className="mt-1 h-5 w-5 rounded border-input accent-primary shrink-0"
+      />
       <Label htmlFor="gdpr" className="text-xs text-muted-foreground leading-relaxed cursor-pointer">
         Li e concordo com a{" "}
         <a
@@ -643,6 +696,17 @@ const Register = () => {
       if (lastTrackedRef.current.email === value) return;
       lastTrackedRef.current.email = value;
       payload.partial_email = value;
+      // Sugere correção de typos comuns de domínio (gmial.com → gmail.com).
+      const fix = suggestEmailFix(value);
+      if (fix) {
+        toast.message("Você quis dizer?", {
+          description: fix,
+          action: {
+            label: "Usar este",
+            onClick: () => setFormData((prev) => ({ ...prev, [label]: fix })),
+          },
+        });
+      }
     } else if (lower.includes("nome") || lower.includes("name")) {
       if (lastTrackedRef.current.name === value) return;
       lastTrackedRef.current.name = value;
@@ -780,10 +844,16 @@ const Register = () => {
     try {
       const utms = utmsRef.current || {};
       // Normalize multiselect fields from internal "\u001F" separator to a human-readable ", " before persisting.
+      // Também normaliza e-mail (trim + lowercase) para reduzir bounces por
+      // espaços invisíveis vindos do auto-preenchimento de teclados móveis.
       const normalizedData: Record<string, string> = { ...formData };
       formFields?.forEach((f) => {
         if (f.field_type === "multiselect" && typeof normalizedData[f.label] === "string") {
           normalizedData[f.label] = normalizedData[f.label].split("\u001F").filter(Boolean).join(", ");
+        }
+        const isEmailField = f.field_type === "email" || /e-?mail/i.test(f.label);
+        if (isEmailField && typeof normalizedData[f.label] === "string") {
+          normalizedData[f.label] = normalizedData[f.label].trim().toLowerCase();
         }
       });
       const registrationId = (await createReg.mutateAsync({ event_id: event.id, data: normalizedData, tracking: utms })) as unknown as string;
