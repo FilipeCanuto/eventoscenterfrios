@@ -26,6 +26,43 @@ import { trackPageView, buildInitialPayload } from "@/lib/visitorTracking";
 // Regex simples para validação de e-mail (mais estrita do que `type="email"`).
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 
+// Sugestão de correção para domínios mais comuns escritos errado.
+// Reduz drasticamente bounces "invalid recipient" no Resend.
+const EMAIL_DOMAIN_TYPOS: Record<string, string> = {
+  "gmial.com": "gmail.com",
+  "gmal.com": "gmail.com",
+  "gmai.com": "gmail.com",
+  "gmail.co": "gmail.com",
+  "gmail.con": "gmail.com",
+  "gnail.com": "gmail.com",
+  "hotnail.com": "hotmail.com",
+  "hotmial.com": "hotmail.com",
+  "hotmai.com": "hotmail.com",
+  "hotmail.con": "hotmail.com",
+  "hotmail.co": "hotmail.com",
+  "outlok.com": "outlook.com",
+  "outloo.com": "outlook.com",
+  "outlook.con": "outlook.com",
+  "yaho.com": "yahoo.com",
+  "yahho.com": "yahoo.com",
+  "yahoo.con": "yahoo.com",
+  "icloud.con": "icloud.com",
+  "iclod.com": "icloud.com",
+  "uol.com": "uol.com.br",
+  "bol.com": "bol.com.br",
+};
+
+function suggestEmailFix(email: string): string | null {
+  const v = (email || "").trim().toLowerCase();
+  const at = v.lastIndexOf("@");
+  if (at < 1) return null;
+  const local = v.slice(0, at);
+  const domain = v.slice(at + 1);
+  const fixed = EMAIL_DOMAIN_TYPOS[domain];
+  if (!fixed || fixed === domain) return null;
+  return `${local}@${fixed}`;
+}
+
 // Wrapper seguro para o canvas-confetti — em alguns in-app browsers
 // (Instagram/WhatsApp/Facebook Android, Safari iOS antigo) a chamada pode
 // lançar e derrubar a página de sucesso. Falhar silenciosamente é OK.
