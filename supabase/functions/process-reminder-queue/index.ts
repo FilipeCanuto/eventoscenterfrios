@@ -144,6 +144,15 @@ serve(async (req) => {
           continue;
         }
 
+        const recipientEmail = (reg.lead_email || "").trim().toLowerCase();
+        if (suppressedSet.has(recipientEmail)) {
+          await supabase.from("scheduled_emails")
+            .update({ status: "cancelled", error: "recipient_suppressed" })
+            .eq("id", item.id);
+          skipped++;
+          continue;
+        }
+
         const ev = (reg as any).events;
         if (!ev) {
           await supabase.from("scheduled_emails")
@@ -188,14 +197,58 @@ serve(async (req) => {
 
         const respBody = await resp.text();
         if (!resp.ok) {
+          const lower = respBody.toLowerCase();
+          const isDomainConfigError =
+            resp.status === 401 || resp.status === 403 ||
+            lower.includes("not verified") || lower.includes("validation_error");
+          const isInvalidRecipient =
+            resp.status === 422 ||
+            lower.includes("invalid `to`") || lower.includes("invalid email");
+
+          if (isDomainConfigError) {
+            try {
+              await supabase.from("email_send_state").upsert({
+                id: 1,
+                cooldown_until: new Date(Date.now() + 30 * 60 * 1000).toISOString(),
+                last_provider_status: resp.status,
+                last_provider_error: respBody.slice(0, 500),
+                updated_at: new Date().toISOString(),
+              });
+            } catch (_) { /* noop */ }
+          }
+          if (isInvalidRecipient) {
+            try {
+              await supabase.from("suppressed_emails").upsert({
+                email: recipientEmail,
+                reason: "invalid_recipient",
+                source: "process-reminder-queue",
+              });
+              suppressedSet.add(recipientEmail);
+            } catch (_) { /* noop */ }
+          }
+
           const newAttempts = (item.attempts || 0) + 1;
-          const status = newAttempts >= 3 ? "failed" : "pending";
+          // Em erro de domínio, marcamos como failed direto para não reenfileirar.
+          const status = isDomainConfigError || isInvalidRecipient
+            ? "failed"
+            : (newAttempts >= 3 ? "failed" : "pending");
           await supabase.from("scheduled_emails").update({
             attempts: newAttempts,
             status,
             error: `provider_${resp.status}: ${respBody.slice(0, 200)}`,
           }).eq("id", item.id);
+
+          await supabase.from("email_send_log").insert({
+            registration_id: reg.id,
+            email_type: item.email_type,
+            recipient_email: recipientEmail,
+            status: "failed",
+            provider_status: resp.status,
+            error_message: respBody.slice(0, 500),
+          });
+
           failed++;
+          if (isDomainConfigError) break; // aborta o ciclo
           continue;
         }
 
@@ -204,6 +257,13 @@ serve(async (req) => {
           sent_at: new Date().toISOString(),
           error: null,
         }).eq("id", item.id);
+        await supabase.from("email_send_log").insert({
+          registration_id: reg.id,
+          email_type: item.email_type,
+          recipient_email: recipientEmail,
+          status: "sent",
+          provider_status: resp.status,
+        });
         sent++;
       } catch (e) {
         console.error("[process-reminder-queue] item error", item.id, e);
