@@ -497,20 +497,27 @@ const RegistrationForm = ({
                 const checked = selectedMulti.includes(opt);
                 const id = `${field.id}-${opt}`;
                 return (
-                  <div key={opt} className="flex items-center gap-2">
-                    <Checkbox
+                  <label
+                    key={opt}
+                    htmlFor={id}
+                    className="flex items-center gap-3 cursor-pointer min-h-11 py-1"
+                  >
+                    <input
                       id={id}
+                      type="checkbox"
                       checked={checked}
-                      onCheckedChange={(c) => {
+                      onChange={(e) => {
+                        const c = e.target.checked;
                         const next = c
                           ? [...selectedMulti, opt]
                           : selectedMulti.filter((x) => x !== opt);
                         const ordered = options.filter((o) => next.includes(o));
                         onFieldChange(field.label, ordered.join(MULTI_SEP));
                       }}
+                      className="h-5 w-5 rounded border-input accent-primary shrink-0"
                     />
-                    <Label htmlFor={id} className="text-sm cursor-pointer font-normal">{opt}</Label>
-                  </div>
+                    <span className="text-sm font-normal">{opt}</span>
+                  </label>
                 );
               })}
             </div>
@@ -569,7 +576,13 @@ const RegistrationForm = ({
       );
     })}
     <div className="flex items-start gap-2 pt-2">
-      <Checkbox id="gdpr" checked={consent} onCheckedChange={(c) => onConsentChange(!!c)} className="mt-0.5" />
+      <input
+        id="gdpr"
+        type="checkbox"
+        checked={consent}
+        onChange={(e) => onConsentChange(e.target.checked)}
+        className="mt-1 h-5 w-5 rounded border-input accent-primary shrink-0"
+      />
       <Label htmlFor="gdpr" className="text-xs text-muted-foreground leading-relaxed cursor-pointer">
         Li e concordo com a{" "}
         <a
