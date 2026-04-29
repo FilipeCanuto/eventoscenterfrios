@@ -696,6 +696,17 @@ const Register = () => {
       if (lastTrackedRef.current.email === value) return;
       lastTrackedRef.current.email = value;
       payload.partial_email = value;
+      // Sugere correção de typos comuns de domínio (gmial.com → gmail.com).
+      const fix = suggestEmailFix(value);
+      if (fix) {
+        toast.message("Você quis dizer?", {
+          description: fix,
+          action: {
+            label: "Usar este",
+            onClick: () => setFormData((prev) => ({ ...prev, [label]: fix })),
+          },
+        });
+      }
     } else if (lower.includes("nome") || lower.includes("name")) {
       if (lastTrackedRef.current.name === value) return;
       lastTrackedRef.current.name = value;
