@@ -3,7 +3,10 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Checkbox } from "@/components/ui/checkbox";
+// Checkbox Radix removido propositalmente do fluxo público: usamos
+// <input type="checkbox"> nativo para máxima compatibilidade em
+// in-app browsers (WhatsApp/Instagram/Facebook), Android WebView e
+// extensões de tradução automática.
 // Radix Select removido propositalmente: o fluxo público usa <select> nativo
 // em todos os dispositivos para evitar crashes de Portal/hydration em
 // in-app browsers (WhatsApp/Instagram), Android WebView e Google Translate.
