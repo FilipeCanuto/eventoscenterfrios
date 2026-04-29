@@ -478,44 +478,29 @@ const RegistrationForm = ({
               })}
             </div>
           ) : isSelect ? (
-            isMobile ? (
-              // Select nativo no mobile: 100% compatível com qualquer navegador,
-              // abre roleta no iOS / drawer no Android, sem risco de Portal/transform.
-              <select
-                id={fieldId}
-                value={value}
-                required={field.required}
-                onChange={(e) => onFieldChange(field.label, e.target.value)}
-                className="flex h-12 w-full items-center rounded-md border border-input bg-background px-3 py-2 text-base ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 appearance-none bg-no-repeat bg-right pr-10"
-                style={{
-                  fontSize: "16px",
-                  backgroundImage:
-                    "url(\"data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'/%3e%3c/svg%3e\")",
-                  backgroundPosition: "right 12px center",
-                }}
-              >
-                <option value="" disabled>
-                  {field.placeholder || `Selecione ${field.label.toLowerCase()}`}
-                </option>
-                {options.map((opt) => (
-                  <option key={opt} value={opt}>{opt}</option>
-                ))}
-              </select>
-            ) : (
-              <Select
-                value={value}
-                onValueChange={(v) => onFieldChange(field.label, v)}
-              >
-                <SelectTrigger id={fieldId} className="h-12 text-base rounded-md" style={{ fontSize: "16px" }}>
-                  <SelectValue placeholder={field.placeholder || `Selecione ${field.label.toLowerCase()}`} />
-                </SelectTrigger>
-                <SelectContent>
-                  {options.map((opt) => (
-                    <SelectItem key={opt} value={opt}>{opt}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            )
+            // Select nativo em TODOS os dispositivos: 100% compatível com qualquer
+            // navegador (incluindo WebViews de WhatsApp/Instagram), abre roleta no
+            // iOS / drawer no Android, sem risco de Portal/transform/hydration.
+            <select
+              id={fieldId}
+              value={value}
+              required={field.required}
+              onChange={(e) => onFieldChange(field.label, e.target.value)}
+              className="flex h-12 w-full items-center rounded-md border border-input bg-background px-3 py-2 text-base ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 appearance-none bg-no-repeat bg-right pr-10"
+              style={{
+                fontSize: "16px",
+                backgroundImage:
+                  "url(\"data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'/%3e%3c/svg%3e\")",
+                backgroundPosition: "right 12px center",
+              }}
+            >
+              <option value="" disabled>
+                {field.placeholder || `Selecione ${field.label.toLowerCase()}`}
+              </option>
+              {options.map((opt) => (
+                <option key={opt} value={opt}>{opt}</option>
+              ))}
+            </select>
           ) : (
             <>
               <Input
