@@ -844,10 +844,16 @@ const Register = () => {
     try {
       const utms = utmsRef.current || {};
       // Normalize multiselect fields from internal "\u001F" separator to a human-readable ", " before persisting.
+      // Também normaliza e-mail (trim + lowercase) para reduzir bounces por
+      // espaços invisíveis vindos do auto-preenchimento de teclados móveis.
       const normalizedData: Record<string, string> = { ...formData };
       formFields?.forEach((f) => {
         if (f.field_type === "multiselect" && typeof normalizedData[f.label] === "string") {
           normalizedData[f.label] = normalizedData[f.label].split("\u001F").filter(Boolean).join(", ");
+        }
+        const isEmailField = f.field_type === "email" || /e-?mail/i.test(f.label);
+        if (isEmailField && typeof normalizedData[f.label] === "string") {
+          normalizedData[f.label] = normalizedData[f.label].trim().toLowerCase();
         }
       });
       const registrationId = (await createReg.mutateAsync({ event_id: event.id, data: normalizedData, tracking: utms })) as unknown as string;
