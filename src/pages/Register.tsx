@@ -4,7 +4,9 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+// Radix Select removido propositalmente: o fluxo público usa <select> nativo
+// em todos os dispositivos para evitar crashes de Portal/hydration em
+// in-app browsers (WhatsApp/Instagram), Android WebView e Google Translate.
 import { useParams, useSearchParams } from "react-router-dom";
 import { CalendarDays, MapPin, Video, Globe, Loader2, Zap, Mail, QrCode, Clock, MessageCircle, Copy, Check, CheckCircle2 } from "lucide-react";
 import { useEventBySlug, Event } from "@/hooks/useEvents";
