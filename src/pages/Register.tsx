@@ -424,9 +424,6 @@ const RegistrationForm = ({
   urgencyText?: string;
   className?: string;
 }) => {
-  // Mobile-first: usa <select> HTML nativo no celular para evitar bugs do
-  // Radix Portal em Android WebViews antigos / in-app browsers.
-  const isMobile = useIsMobile();
   return (
   <form onSubmit={onSubmit} className={`space-y-4 ${className}`} noValidate>
     {urgencyText && (
