@@ -1,14 +1,20 @@
 import { useState, useMemo } from "react";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Search, Download, Loader2, ArrowUp, ArrowDown, ArrowUpDown, ChevronLeft, ChevronRight } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Search, Loader2, ArrowUp, ArrowDown, ArrowUpDown, ChevronLeft, ChevronRight } from "lucide-react";
 import { useRegistrations, Registration, useRegistrationStats } from "@/hooks/useRegistrations";
 import RegistrationDetailDialog from "@/components/dashboard/RegistrationDetailDialog";
+import AttendeesFilters from "@/components/dashboard/AttendeesFilters";
+import ExportMenu from "@/components/dashboard/ExportMenu";
+import {
+  AttendeesFilterState, EMPTY_FILTERS, applyFilters, computeOptions,
+  describeFilters, getCompany, getDays, getSegment, getSource,
+} from "@/lib/attendeesFilters";
 import { format, subDays } from "date-fns";
 import { ptBR } from "date-fns/locale";
 
@@ -28,16 +34,11 @@ type SortColumn = "name" | "email" | "event" | "status" | "date" | "source";
 type SortDir = "asc" | "desc";
 const PAGE_SIZE = 15;
 
-function getSource(r: any): string {
-  const t = (r.tracking || {}) as Record<string, string>;
-  const data = (r.data || {}) as Record<string, string>;
-  return (t.utm_source || data.__utm_source || "direto").toString();
-}
-
 const Attendees = () => {
   const [search, setSearch] = useState("");
   const [eventFilter, setEventFilter] = useState<string>("all");
   const [hideCancelled, setHideCancelled] = useState(true);
+  const [filters, setFilters] = useState<AttendeesFilterState>(EMPTY_FILTERS);
   const [sortColumn, setSortColumn] = useState<SortColumn>("date");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
   const [page, setPage] = useState(0);
@@ -53,6 +54,15 @@ const Attendees = () => {
     return Array.from(map.entries()).sort((a, b) => a[1].localeCompare(b[1]));
   }, [registrations]);
 
+  // Opções calculadas a partir do escopo "evento selecionado", para evitar
+  // mostrar segmentos/dias que não pertencem ao recorte atual.
+  const scopedRegistrations = useMemo(() => {
+    if (eventFilter === "all") return registrations || [];
+    return (registrations || []).filter((r) => r.event_id === eventFilter);
+  }, [registrations, eventFilter]);
+
+  const filterOptions = useMemo(() => computeOptions(scopedRegistrations), [scopedRegistrations]);
+
   const handleSort = (col: SortColumn) => {
     if (sortColumn === col) setSortDir(d => d === "asc" ? "desc" : "asc");
     else { setSortColumn(col); setSortDir("asc"); }
@@ -67,8 +77,8 @@ const Attendees = () => {
   const getValue = (r: any, col: SortColumn): string => {
     const data = r.data as Record<string, string>;
     switch (col) {
-      case "name": return (r.lead_name || data["Full Name"] || data["Name"] || "").toLowerCase();
-      case "email": return (r.lead_email || data["Email Address"] || data["Email"] || "").toLowerCase();
+      case "name": return (r.lead_name || data["Nome Completo"] || data["Full Name"] || data["Name"] || "").toLowerCase();
+      case "email": return (r.lead_email || data["Endereço de E-mail"] || data["Email Address"] || data["Email"] || "").toLowerCase();
       case "event": return ((r as any).events?.name || "").toLowerCase();
       case "status": return r.status;
       case "date": return r.created_at;
@@ -77,74 +87,40 @@ const Attendees = () => {
   };
 
   const filtered = useMemo(() => {
-    let items = registrations?.filter(r => {
-      if (hideCancelled && r.status === "cancelled") return false;
-      if (eventFilter !== "all" && r.event_id !== eventFilter) return false;
-      if (!search) return true;
-      const data = r.data as Record<string, string>;
-      const searchLower = search.toLowerCase();
-      return (
-        Object.values(data).some(v => typeof v === "string" && v.toLowerCase().includes(searchLower)) ||
-        (r.events?.name || "").toLowerCase().includes(searchLower)
-      );
-    }) || [];
-
+    const items = applyFilters(registrations, filters, search, hideCancelled, {
+      eventId: eventFilter === "all" ? null : eventFilter,
+    });
     items.sort((a, b) => {
       const va = getValue(a, sortColumn);
       const vb = getValue(b, sortColumn);
       const cmp = va < vb ? -1 : va > vb ? 1 : 0;
       return sortDir === "asc" ? cmp : -cmp;
     });
-
     return items;
-  }, [registrations, search, eventFilter, hideCancelled, sortColumn, sortDir]);
+  }, [registrations, filters, search, hideCancelled, eventFilter, sortColumn, sortDir]);
 
   const totalPages = Math.ceil(filtered.length / PAGE_SIZE);
   const paged = filtered.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
 
-  // Métricas
+  // Métricas refletem o filtro atual (excluindo paginação)
   const metrics = useMemo(() => {
-    const all = stats?.registrations || [];
-    const total = all.length;
-    const checkedIn = all.filter((r: any) => r.status === "checked_in").length;
-    const cancelled = all.filter((r: any) => r.status === "cancelled").length;
-    const sevenDaysAgo = subDays(new Date(), 7);
-    const recent = all.filter((r: any) => new Date(r.created_at) >= sevenDaysAgo).length;
+    const total = filtered.length;
+    const checkedIn = filtered.filter((r: any) => r.checked_in_at || r.status === "checked_in").length;
+    const cancelled = filtered.filter((r: any) => r.status === "cancelled").length;
+    const sevenDaysAgo = subDays(new Date(), 7).getTime();
+    const recent = filtered.filter((r: any) => new Date(r.created_at).getTime() >= sevenDaysAgo).length;
     const pct = (n: number) => total > 0 ? Math.round((n / total) * 100) : 0;
     return { total, checkedIn, cancelled, recent, checkedInPct: pct(checkedIn), cancelledPct: pct(cancelled) };
-  }, [stats]);
+  }, [filtered]);
 
-  const handleExportCSV = () => {
-    if (!filtered?.length) return;
-    const headers = ["Nome", "E-mail", "WhatsApp", "Evento", "Origem", "Status", "Inscrição", "Check-in em"];
-    const rows = filtered.map((r: any) => {
-      const data = r.data as Record<string, string>;
-      return [
-        r.lead_name || data["Full Name"] || data["Name"] || "",
-        r.lead_email || data["Email Address"] || data["Email"] || "",
-        r.lead_whatsapp || data["WhatsApp"] || data["Telefone"] || "",
-        (r as any).events?.name || "",
-        getSource(r),
-        statusLabels[r.status] || r.status,
-        format(new Date(r.created_at), "d MMM yyyy HH:mm", { locale: ptBR }),
-        r.checked_in_at ? format(new Date(r.checked_in_at), "d MMM yyyy HH:mm", { locale: ptBR }) : "",
-      ];
-    });
-    const escapeCSV = (val: string): string => {
-      const str = String(val ?? "");
-      const safe = str.replace(/^([=+\-@])/, "'$1");
-      if (safe.includes(',') || safe.includes('"') || safe.includes('\n')) return `"${safe.replace(/"/g, '""')}"`;
-      return safe;
-    };
-    const csv = [headers, ...rows].map(r => r.map(escapeCSV).join(",")).join("\n");
-    const blob = new Blob([csv], { type: "text/csv" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `participantes${eventFilter !== "all" ? "-filtrado" : ""}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
-  };
+  const totalAll = stats?.registrations?.length ?? 0;
+
+  const eventName = eventFilter === "all"
+    ? null
+    : (eventOptions.find(([id]) => id === eventFilter)?.[1] ?? null);
+
+  const exportFilename = `participantes_${eventName ? eventName.toLowerCase().replace(/\s+/g, "-") : "todos"}_${format(new Date(), "yyyy-MM-dd")}`;
+  const filtersDescription = describeFilters(filters, search, hideCancelled, eventName);
 
   const getRegData = (r: Registration) => r.data as Record<string, string>;
 
@@ -155,15 +131,25 @@ const Attendees = () => {
           <h1 className="text-3xl font-display font-bold">Participantes</h1>
           <p className="text-muted-foreground">Gerencie e exporte os dados dos seus participantes.</p>
         </div>
-        <Button variant="outline" size="sm" className="w-full sm:w-auto rounded-full bg-card" onClick={handleExportCSV}>
-          <Download className="w-4 h-4 mr-2" /> Exportar CSV
-        </Button>
+        <ExportMenu
+          items={filtered}
+          filename={exportFilename}
+          filtersDescription={filtersDescription}
+          includeEvent
+          size="default"
+          label="Exportar"
+        />
       </div>
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <div className="bg-card rounded-xl p-5">
-          <p className="text-sm text-muted-foreground">Total de inscrições</p>
-          <p className="text-2xl font-display font-bold mt-1">{metrics.total}</p>
+          <p className="text-sm text-muted-foreground">{filtered.length === totalAll ? "Total de inscrições" : "Inscrições no filtro"}</p>
+          <p className="text-2xl font-display font-bold mt-1">
+            {metrics.total}
+            {filtered.length !== totalAll && (
+              <span className="text-sm font-normal text-muted-foreground ml-1">/ {totalAll}</span>
+            )}
+          </p>
         </div>
         <div className="bg-card rounded-xl p-5">
           <p className="text-sm text-muted-foreground">Check-ins</p>
@@ -183,7 +169,7 @@ const Attendees = () => {
         </div>
       </div>
 
-      <div className="flex flex-col sm:flex-row gap-3 sm:items-center">
+      <div className="flex flex-col sm:flex-row gap-3 sm:items-center flex-wrap">
         <div className="relative flex-1 sm:max-w-sm">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
           <Input placeholder="Buscar participantes…" className="pl-10 rounded-full bg-card" value={search} onChange={e => { setSearch(e.target.value); setPage(0); }} />
@@ -199,6 +185,11 @@ const Attendees = () => {
             ))}
           </SelectContent>
         </Select>
+        <AttendeesFilters
+          value={filters}
+          onChange={(v) => { setFilters(v); setPage(0); }}
+          options={filterOptions}
+        />
         <div className="flex items-center gap-2 sm:ml-auto px-2">
           <Switch id="hide-cancelled" checked={hideCancelled} onCheckedChange={(v) => { setHideCancelled(v); setPage(0); }} />
           <Label htmlFor="hide-cancelled" className="text-sm cursor-pointer">Ocultar canceladas</Label>
@@ -222,8 +213,17 @@ const Attendees = () => {
                   <TableHead className="hidden md:table-cell">
                     <span className="flex items-center text-xs font-semibold uppercase tracking-wider text-muted-foreground">WhatsApp</span>
                   </TableHead>
+                  <TableHead className="hidden xl:table-cell">
+                    <span className="flex items-center text-xs font-semibold uppercase tracking-wider text-muted-foreground">Empresa</span>
+                  </TableHead>
+                  <TableHead className="hidden xl:table-cell">
+                    <span className="flex items-center text-xs font-semibold uppercase tracking-wider text-muted-foreground">Segmento</span>
+                  </TableHead>
                   <TableHead className="cursor-pointer select-none hidden md:table-cell" onClick={() => handleSort("event")}>
                     <span className="flex items-center text-xs font-semibold uppercase tracking-wider text-muted-foreground">Evento <SortIcon col="event" /></span>
+                  </TableHead>
+                  <TableHead className="hidden lg:table-cell">
+                    <span className="flex items-center text-xs font-semibold uppercase tracking-wider text-muted-foreground">Dias</span>
                   </TableHead>
                   <TableHead className="cursor-pointer select-none hidden lg:table-cell" onClick={() => handleSort("source")}>
                     <span className="flex items-center text-xs font-semibold uppercase tracking-wider text-muted-foreground">Origem <SortIcon col="source" /></span>
@@ -242,16 +242,35 @@ const Attendees = () => {
               <TableBody>
                 {paged.map((r: any) => {
                   const data = getRegData(r);
+                  const days = getDays(r);
                   return (
                     <TableRow
                       key={r.id}
                       className="cursor-pointer hover:bg-muted/50 transition-colors border-0"
                       onClick={() => setSelectedRegistration(r)}
                     >
-                      <TableCell className="font-medium">{r.lead_name || data["Full Name"] || data["Name"] || "—"}</TableCell>
-                      <TableCell className="text-muted-foreground hidden sm:table-cell">{r.lead_email || data["Email Address"] || data["Email"] || "—"}</TableCell>
+                      <TableCell className="font-medium">{r.lead_name || data["Nome Completo"] || data["Full Name"] || data["Name"] || "—"}</TableCell>
+                      <TableCell className="text-muted-foreground hidden sm:table-cell">{r.lead_email || data["Endereço de E-mail"] || data["Email Address"] || data["Email"] || "—"}</TableCell>
                       <TableCell className="text-muted-foreground hidden md:table-cell">{r.lead_whatsapp || data["WhatsApp"] || data["Telefone"] || "—"}</TableCell>
+                      <TableCell className="hidden xl:table-cell text-sm">{getCompany(r) || "—"}</TableCell>
+                      <TableCell className="hidden xl:table-cell text-sm text-muted-foreground">{getSegment(r) || "—"}</TableCell>
                       <TableCell className="hidden md:table-cell">{r.events?.name || "—"}</TableCell>
+                      <TableCell className="hidden lg:table-cell">
+                        {days.length ? (
+                          <div className="flex flex-wrap gap-1 max-w-[160px]">
+                            {days.map((d) => {
+                              const short = (d.match(/\d{2}\/\d{2}/) || [d])[0];
+                              return (
+                                <Badge key={d} variant="secondary" className="text-[10px] rounded-full px-2 py-0">
+                                  {short}
+                                </Badge>
+                              );
+                            })}
+                          </div>
+                        ) : (
+                          <span className="text-muted-foreground/50 text-xs">—</span>
+                        )}
+                      </TableCell>
                       <TableCell className="hidden lg:table-cell">
                         <Badge variant="outline" className="text-xs rounded-full capitalize">{getSource(r)}</Badge>
                       </TableCell>
