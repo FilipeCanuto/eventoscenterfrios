@@ -882,7 +882,7 @@ const Register = () => {
         }
         const isEmailField = f.field_type === "email" || /e-?mail/i.test(f.label);
         if (isEmailField && typeof normalizedData[f.label] === "string") {
-          normalizedData[f.label] = normalizedData[f.label].trim().toLowerCase();
+          normalizedData[f.label] = normalizeEmail(normalizedData[f.label]);
         }
       });
       const registrationId = (await createReg.mutateAsync({ event_id: event.id, data: normalizedData, tracking: utms })) as unknown as string;
