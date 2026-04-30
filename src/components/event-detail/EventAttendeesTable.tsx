@@ -5,10 +5,16 @@ import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Search, Download, Loader2, ArrowUp, ArrowDown, ArrowUpDown, ChevronLeft, ChevronRight, Trash2, CheckCircle, MailWarning } from "lucide-react";
+import { Search, Loader2, ArrowUp, ArrowDown, ArrowUpDown, ChevronLeft, ChevronRight, Trash2, CheckCircle, MailWarning } from "lucide-react";
 import { fetchPendingConfirmations, runBackfillConfirmations } from "@/hooks/useRegistrationEmails";
 import { useRegistrationsByEvent, useCancelRegistration, useCheckInRegistration } from "@/hooks/useRegistrations";
 import RegistrationDetailDialog from "@/components/dashboard/RegistrationDetailDialog";
+import AttendeesFilters from "@/components/dashboard/AttendeesFilters";
+import ExportMenu from "@/components/dashboard/ExportMenu";
+import {
+  AttendeesFilterState, EMPTY_FILTERS, applyFilters, computeOptions,
+  describeFilters, getCompany, getDays, getSegment, getSource,
+} from "@/lib/attendeesFilters";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -37,12 +43,6 @@ const statusLabels: Record<string, string> = {
 
 type SortColumn = "name" | "email" | "status" | "date" | "source";
 type SortDir = "asc" | "desc";
-
-function getSource(r: any): string {
-  const t = (r.tracking || {}) as Record<string, string>;
-  const data = (r.data || {}) as Record<string, string>;
-  return (t.utm_source || data.__utm_source || "direto").toString();
-}
 
 const PAGE_SIZE = 15;
 
