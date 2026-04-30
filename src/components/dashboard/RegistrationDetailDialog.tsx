@@ -475,9 +475,20 @@ export default function RegistrationDetailDialog({ registration, onClose }: Prop
                 </div>
               </section>
             )}
-          </div>
+            </TabsContent>
 
-          <DialogFooter className="flex-col sm:flex-row gap-2">
+            <TabsContent value="emails" className="mt-0">
+              <RegistrationEmailsTab
+                registrationId={registration.id}
+                recipientEmail={getEmail(registration)}
+                status={registration.status}
+              />
+            </TabsContent>
+
+            <TabsContent value="templates" className="mt-0">
+              <RegistrationTemplatesTab registrationId={registration.id} />
+            </TabsContent>
+          </Tabs>
             {editing ? (
               <>
                 <Button variant="ghost" className="rounded-full" onClick={handleCancelEdit}>
