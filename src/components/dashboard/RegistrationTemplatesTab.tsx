@@ -6,7 +6,6 @@ import { toast } from "sonner";
 
 const TEMPLATES: { type: string; label: string; description: string }[] = [
   { type: "confirmation", label: "Confirmação de inscrição", description: "Enviado imediatamente após a inscrição." },
-  { type: "reminder_7d", label: "Lembrete — 7 dias antes", description: "Aviso para começar a se preparar." },
   { type: "reminder_1d", label: "Lembrete — 1 dia antes", description: "Contagem regressiva e QR Code." },
   { type: "reminder_2h", label: "Lembrete — 2 horas antes", description: "QR Code grande para check-in." },
 ];

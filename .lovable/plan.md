@@ -1,117 +1,84 @@
-# Plano: recuperação de confirmações + central de e-mails por inscrito
+## O que vou fazer
 
-## 1. Diagnóstico (o que descobri no banco)
-
-Antes de propor a solução, fiz um levantamento direto na base:
-
-- **123 inscritos** com status `registered`.
-- **0 registros** em `email_send_log` com confirmação enviada com sucesso.
-- **246 lembretes pendentes** (`reminder_1d` e `reminder_2h`) já programados — esses vão sair normalmente agora que o Resend voltou.
-- **48 lembretes `reminder_7d**` já marcados como `sent` (do período antes da queda).
-- A confirmação de inscrição **não é agendada** em `scheduled_emails` — ela é disparada inline no momento do cadastro. Como o domínio estava rejeitando, **nenhum dos 123 inscritos atuais recebeu o e-mail de confirmação.**
-
-Conclusão: precisamos de uma **operação de recuperação** (resend em lote) + a **central de e-mails por inscrito** que você pediu.
+Aplicar quatro melhorias coordenadas: (1) remover o lembrete de 7 dias do produto, (2) garantir validação e normalização avançadas de e-mail antes de qualquer envio, (3) blindar o sistema contra envio duplicado para o mesmo destinatário, e (4) ajustar o ritmo de disparo em todos os pontos para ficar bem abaixo do limite do Resend e evitar bloqueios.
 
 ---
 
-## 2. O que vou construir
+### 1. Remover o lembrete de 7 dias
 
-### Parte A — Recuperar os inscritos que não receberam confirmação
+- **Banco**: nova migração que
+  - atualiza a função `schedule_event_reminders` para parar de enfileirar `reminder_7d`,
+  - atualiza `reschedule_event_reminders` removendo o ramo de 7 dias,
+  - cancela (`UPDATE scheduled_emails SET status='cancelled'`) todos os `reminder_7d` ainda `pending` (não apaga, preserva histórico).
+- **Edge functions**:
+  - `process-reminder-queue`: nada a mudar (lê o que está pending, e os pending de 7d serão cancelados).
+  - `render-email-preview`: remover `reminder_7d` da lista válida.
+- **Front**:
+  - `RegistrationTemplatesTab.tsx` e `RegistrationEmailsTab.tsx`: remover o item "Lembrete — 7 dias antes".
+- **Templates**: deixo a função `buildReminder7d` no arquivo (sem custo) para não quebrar histórico antigo já enviado, mas ela deixa de ser referenciada.
 
-**A.1. Detecção automática de "pendentes"**
-Criar uma view/consulta que identifica todo `registration` com status `registered` que **não** tem registro `sent` em `email_send_log` para `email_type = 'registration_confirmation'`. Esses são os candidatos ao reenvio.
+### 2. Validação e normalização avançadas de e-mail
 
-**A.2. Edge function `backfill-confirmations**` (nova)
+Centralizo num utilitário `_shared/email-validate.ts` reutilizado por **todas** as funções (`send-registration-confirmation`, `process-reminder-queue`, `backfill-confirmations`):
 
-- Recebe opcionalmente um `eventId` (ou roda para todos os eventos do admin).
-- Lista os inscritos pendentes da consulta acima.
-- Filtra: ignora e-mails na `suppressed_emails` e e-mails inválidos.
-- Dispara `send-registration-confirmation` em lotes pequenos (10 por rodada, com 1s de pausa) para respeitar o rate-limit do Resend e evitar bounce em cascata.
-- Registra cada tentativa em `email_send_log` (já existe a infra).
-- Retorna `{ scheduled, skipped_suppressed, skipped_invalid, failed }` para feedback no UI.
+- `normalizeEmail(raw)`: `trim`, lowercase, remove espaços invisíveis (zero-width, NBSP), corrige `,` por `.` no domínio, remove ponto final acidental.
+- `validateEmail(email)`:
+  - regex RFC-pragmática (sem TLD numérico, exige TLD ≥2 letras),
+  - rejeita pontos consecutivos, `@` ausente/duplicado, comprimento >254 e local-part >64,
+  - lista negra de TLDs claramente inválidos (`.con`, `.cmo`, `.comm`, `.ne`, `.og`).
+- `suggestEmailFix(email)`: já existe no front; movo a tabela canônica para o shared (gmial→gmail, hotnail→hotmail, yaho→yahoo, outloo→outlook, icluod→icloud, bol.com→bol.com.br, etc.) e uso também no servidor para **autocorreção silenciosa** (ex.: `gmial.com` → `gmail.com`) ANTES de enviar, registrando no log o ajuste aplicado.
+- `isDisposableOrRoleEmail(email)`: bloqueia envio para listas conhecidas de descartáveis e role-based (`postmaster@`, `noreply@`, `mailer-daemon@`).
 
-**A.3. Botão "Reenviar confirmações pendentes" no painel**
+Em qualquer envio, se a validação falhar:
+- registra em `email_send_log` com `status='failed'` e `error_message='invalid_email_address: <motivo>'`,
+- adiciona em `suppressed_emails` com `reason='invalid_format'`,
+- não conta como tentativa contra o Resend (não chama o gateway).
 
-- Na tela do evento (em `EventAttendeesTable.tsx` / `EventDetailHeader.tsx`), adicionar um botão discreto que:
-  1. Mostra a contagem de pendentes ("23 inscritos sem confirmação").
-  2. Ao clicar, abre confirmação ("Enviar 23 e-mails agora?") e dispara a function.
-  3. Mostra toast de progresso e atualiza a contagem ao fim.
+No formulário de inscrição (`Register.tsx`) também aplico a mesma normalização + autocorreção (já existia para typos, agora unificada com o servidor) antes de chamar `register_for_event`, evitando que e-mails ruins entrem no banco.
 
-### Parte B — Aba "E-mails" no card do inscrito (`RegistrationDetailDialog`)
+### 3. Anti-duplicação por destinatário
 
-Adicionar abas no diálogo do inscrito: **Dados | E-mails | Templates**.
+Garantia em três camadas:
 
-**B.1. Aba "E-mails" — histórico do que esse inscrito recebeu**
+1. **Pré-checagem por log**: antes de enviar qualquer `confirmation`, verifico se existe linha em `email_send_log` com mesmo `registration_id` + `email_type='confirmation'` + `status='sent'`. Se sim, retorno `alreadySent`.
+2. **Pré-checagem por destinatário+tipo+evento**: nova consulta em `email_send_log` que cruza `recipient_email` (normalizado) + `email_type` + `event_id` (via join com `registrations`) nos últimos 30 dias. Se houver `sent` recente, **não reenvio**, mesmo que o `registration_id` seja diferente. Isso cobre o caso do mesmo e-mail em duas inscrições do mesmo evento.
+3. **Backfill blindado**: o `backfill-confirmations` já consulta o Resend para "delivered". Adiciono também a checagem do nº 2. E na flag `tracking.confirmation_email_sent_at` continuo respeitando.
 
-- Tabela com: tipo (`Confirmação`, `Lembrete 7d`, `Lembrete 1d`, `Lembrete 2h`), status (Enviado / Falhou / Pendente / Cancelado), data, código de erro do provedor (se houver).
-- Combina dados de `email_send_log` (envios efetivos) + `scheduled_emails` (programados/pendentes/falhados).
-- Botão **"Reenviar confirmação"** ao lado da linha de confirmação se o status for `failed` ou inexistente — chama `send-registration-confirmation` com `force: true`.
-- Aviso visível se o e-mail estiver na lista de supressão, com o motivo.
+Para a fila de lembretes (`scheduled_emails` já tem UNIQUE em `(registration_id, email_type)`), adiciono uma checagem extra antes do disparo: se já existe `email_send_log` com `status='sent'` para `registration_id + email_type` daquele item, marco o item como `sent` sem reenviar.
 
-**B.2. Programados futuros**  
-Mostra na mesma tabela (badge "Programado para 30/04 às 14h") os lembretes ainda não enviados, com data/hora prevista no fuso do evento. (analisar a possibilidade da inclusão de um botão de editar a data do envio dos e-mails programados )
+### 4. Ritmo seguro (anti-banimento)
 
-**B.3. Aba "Templates" — prévia + download**
+Hoje o backfill envia em lotes de 8 com 1.1s, e o cron processa 25/ciclo. Vou reduzir a:
 
-- Renderiza no client uma prévia HTML (iframe sandboxed) de cada um dos 4 templates **personalizados com os dados reais daquele inscrito e do evento** (mesmas funções de `_shared/email-templates.ts` reaproveitadas no front via uma function `render-email-template`).
-- Para cada template:
-  - Botão **"Baixar PNG (alta qualidade)"** — usa `html2canvas` em escala 3x sobre o iframe renderizado, gerando PNG ~retina.
-  - Botão **"Baixar PDF"** — usa `jsPDF` com a imagem capturada, página A4.
-  - Botão **"Baixar HTML"** — salva o `.html` puro (útil para devs/marketing).
-
-### Parte C — Hardenings adicionais ("como melhorar ainda mais")
-
-Aproveitando que estamos tocando nesse fluxo, três melhorias defensivas para **evitar que o problema reapareça**:
-
-1. **Re-envio automático no próximo `process-reminder-queue**`: a function que já roda periodicamente passa também a varrer confirmações `failed`/`missing` recentes (últimas 48h) e tenta de novo, respeitando cooldown e supressão. Isso significa que mesmo sem ação manual, futuros incidentes se auto-corrigem assim que o domínio volta.
-2. **Painel de saúde de e-mails**: pequeno card no topo de `/dashboard/attendees` mostrando "Últimas 24h: X enviados, Y falhados, Z em cooldown" (deduplicado por `message_id`). Visibilidade imediata de problemas.
-3. **Validação proativa do domínio**: a `send-registration-confirmation` testa o status do domínio Resend uma vez por hora (cache em `email_send_state`) e, se estiver `not_verified`, retorna 200 + `queued_for_later` em vez de 403, gravando o registro como `pending_domain` para reenvio automático posterior. Isso elimina o "erro vermelho" para o inscrito.
+- **`backfill-confirmations`**: lotes de **5** sequenciais (não em `Promise.all`), com **400ms** entre cada envio individual e **2s** entre lotes. Resultado: ~2 envios/seg, **bem abaixo** dos 10/s do Resend, dando margem inclusive em rajada com a fila normal.
+- **`process-reminder-queue`**: BATCH_SIZE de **15** (era 25), com **300ms** de pausa entre cada item dentro do batch. O cron continua chamando a cada minuto.
+- **Cooldown global compartilhado**: ambas as functions já consultam `email_send_state.cooldown_until`. Adiciono uma pausa adicional de 60s **após qualquer 429** retornado pelo Resend, registrando o evento.
+- **Envio em série, não paralelo**: troco os `Promise.all` do backfill por `for ... of` para garantir o espaçamento real (paralelismo estoura o rate-limit instantâneo mesmo respeitando média).
 
 ---
 
-## 3. Detalhes técnicos
+### Detalhes técnicos
 
 **Arquivos novos**
-
-- `supabase/functions/backfill-confirmations/index.ts`
-- `supabase/functions/render-email-preview/index.ts` (retorna HTML renderizado para um `registrationId` + `templateType`, reusa `_shared/email-templates.ts`)
-- `src/components/dashboard/RegistrationEmailsTab.tsx`
-- `src/components/dashboard/RegistrationTemplatesTab.tsx`
-- `src/hooks/useRegistrationEmails.ts`
-- Migração: índice `email_send_log(registration_id, email_type, status)` para acelerar consultas.
+- `supabase/functions/_shared/email-validate.ts` — `normalizeEmail`, `validateEmail`, `suggestEmailFix`, `isDisposableOrRoleEmail`.
+- Migração: `..._drop_reminder_7d.sql` — recria as 2 funções sem o ramo de 7d e cancela pendentes.
 
 **Arquivos editados**
+- `supabase/functions/send-registration-confirmation/index.ts` — usa `normalizeEmail`/`validateEmail`/`suggestEmailFix`, pré-checa duplicidade por destinatário+evento+tipo (30d).
+- `supabase/functions/process-reminder-queue/index.ts` — BATCH 15, pausa 300ms entre itens, pré-checa log antes de disparar, ignora qualquer item `reminder_7d` remanescente.
+- `supabase/functions/backfill-confirmations/index.ts` — sequencial, lotes 5, pausas 400ms/2s, usa o validator compartilhado, pré-checa duplicidade.
+- `supabase/functions/render-email-preview/index.ts` — remove `reminder_7d` da lista válida.
+- `src/components/dashboard/RegistrationEmailsTab.tsx` — remove rótulo do 7d.
+- `src/components/dashboard/RegistrationTemplatesTab.tsx` — remove card do 7d.
+- `src/pages/Register.tsx` — usa o mesmo `normalizeEmail` (mantém `suggestEmailFix` já existente).
 
-- `src/components/dashboard/RegistrationDetailDialog.tsx` — adiciona `<Tabs>` com 3 abas.
-- `src/components/event-detail/EventAttendeesTable.tsx` — botão "Reenviar pendentes".
-- `supabase/functions/send-registration-confirmation/index.ts` — modo `queued_for_later` quando domínio não verificado.
-- `supabase/functions/process-reminder-queue/index.ts` — varre confirmações falhadas recentes.
+**Sem alterações de schema** além da migração que reescreve as duas funções e cancela pendentes; nenhuma coluna nova, nenhum índice novo.
 
-**Dependências novas no front**
+**Sem aumento de custo** — apenas reduz envios.
 
-- `html2canvas` (~45kb gz) — captura DOM em alta resolução.
-- `jspdf` (~80kb gz) — geração de PDF client-side.
-Ambas tree-shakable e carregadas só na aba de templates (lazy import).
+### Resultado esperado
 
-**RLS / segurança**
-
-- `email_send_log` já tem policy de admin select; o front consulta via hook que respeita RLS.
-- A function `backfill-confirmations` valida `auth.uid()` e exige `has_role(uid, 'admin')` antes de rodar.
-- Iframe da prévia é `sandbox="allow-same-origin"` (sem scripts), apenas para renderizar HTML.
-
-**Performance / custo**
-
-- Backfill em lotes de 10 com 1s de espaço evita estourar quota do Resend (100/s no plano padrão).
-- Renderização de templates é cacheada por `registrationId+templateType` no React Query (5 min).
-
----
-
-## 4. Resultado esperado
-
-1. Os 123 inscritos atuais que não receberam confirmação podem ser recuperados em 1 clique (~2 minutos para enviar todos).
-2. Para qualquer inscrito futuro, você abre o card → aba **E-mails** e vê exatamente o que ele recebeu, o que vai receber, e pode reenviar/baixar tudo.
-3. Se o domínio cair de novo, o sistema **não perde** envios — eles ficam em `pending_domain` e são reenviados automaticamente quando voltar.
-
-Posso aplicar?  
-  
-Certifique-se de enviar o e-mail de confirmação de cadastro apenas para os contatos que não estão marcados com "delivered" no Resend.
+1. Nenhum e-mail de "7 dias antes" sai mais (nem para inscritos antigos com pendências).
+2. E-mails com typos comuns (`gmial.com`, `hotnail.com`, `yaho.com`...) são autocorrigidos antes de bater no Resend; inválidos são bloqueados localmente e não geram bounce.
+3. Mesmo destinatário não recebe a mesma confirmação duas vezes — nem entre inscrições diferentes do mesmo evento.
+4. Throughput de envio fica em ~2/s no backfill e ~3/s na fila regular, bem dentro do limite de 10/s do Resend.

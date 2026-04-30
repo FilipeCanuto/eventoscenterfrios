@@ -11,7 +11,7 @@ import { toast } from "sonner";
 const TYPE_LABEL: Record<string, string> = {
   confirmation: "Confirmação de inscrição",
   registration_confirmation: "Confirmação de inscrição",
-  reminder_7d: "Lembrete — 7 dias antes",
+  reminder_7d: "Lembrete — 7 dias antes (descontinuado)",
   reminder_1d: "Lembrete — 1 dia antes",
   reminder_2h: "Lembrete — 2 horas antes",
 };

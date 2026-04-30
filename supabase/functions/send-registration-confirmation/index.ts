@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { buildConfirmation } from "../_shared/email-templates.ts";
+import { prepareEmailForSend } from "../_shared/email-validate.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -13,8 +14,9 @@ const FROM_ADDRESS = "Eventos Centerfrios <eventos@eventos.centerfrios.com>";
 const REPLY_TO_ADDRESS = "contato@eventos.centerfrios.com";
 const UNSUBSCRIBE_MAILTO = "contato@eventos.centerfrios.com";
 
-// Validação defensiva de e-mail (evita bounce por digitação ruim).
-const EMAIL_RE = /^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$/i;
+// Janela em que consideramos uma confirmação como "já enviada" para o
+// mesmo destinatário no mesmo evento (anti-duplicação cross-registration).
+const DEDUPE_WINDOW_DAYS = 30;
 
 interface Payload {
   registrationId: string;
@@ -68,10 +70,6 @@ serve(async (req) => {
     );
 
     // ─── Cooldown global ─────────────────────────────────────────────
-    // Se o provedor está rejeitando todos os envios (ex.: domínio não
-    // verificado), respeitamos um cooldown para não gerar cascata de erros
-    // 403 e não consumir cota. O cooldown só bloqueia envios automáticos;
-    // o reenvio manual (force=true) ainda passa para diagnóstico.
     if (!body.force) {
       try {
         const { data: state } = await supabase
@@ -105,7 +103,7 @@ serve(async (req) => {
     const { data: reg, error: regErr } = await supabase
       .from("registrations")
       .select(`
-        id, status, lead_email, lead_name, tracking,
+        id, status, lead_email, lead_name, tracking, event_id,
         events ( id, name, event_date, event_end_date, timezone,
                  location_type, location_value, slug, primary_color, logo_url )
       `)
@@ -125,23 +123,48 @@ serve(async (req) => {
       });
     }
 
-    const recipientEmail = (reg.lead_email || "").trim().toLowerCase();
-    if (!recipientEmail || !EMAIL_RE.test(recipientEmail)) {
+    // ─── Validação e normalização avançada ──────────────────────────
+    const prep = prepareEmailForSend(reg.lead_email);
+    if (!prep.ok) {
       await logAttempt(supabase, {
         registration_id: reg.id,
         email_type: "confirmation",
-        recipient_email: recipientEmail || null,
+        recipient_email: prep.email || null,
         status: "failed",
-        error_message: "invalid_email_address",
+        error_message: `invalid_email_address: ${prep.reason}`,
       });
-      return new Response(JSON.stringify({ error: "No valid email on registration" }), {
+      // Adiciona à supressão para não tentar de novo
+      try {
+        if (prep.email) {
+          await supabase.from("suppressed_emails").upsert({
+            email: prep.email,
+            reason: `invalid_format:${prep.reason}`,
+            source: "send-registration-confirmation",
+          });
+        }
+      } catch (_) { /* noop */ }
+      return new Response(JSON.stringify({ error: "Invalid email", reason: prep.reason }), {
         status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
+    const recipientEmail = prep.email;
 
-    // ─── Supressão ────────────────────────────────────────────────────
-    // Se o e-mail já foi marcado como suprimido (bounce, complaint, inválido),
-    // não tentamos enviar novamente — isso protege a reputação do remetente.
+    // Se o e-mail foi auto-corrigido, atualiza a inscrição para que
+    // futuros envios partam do valor correto.
+    if (prep.corrected) {
+      try {
+        await supabase
+          .from("registrations")
+          .update({ lead_email: recipientEmail })
+          .eq("id", reg.id);
+        console.log("[send-registration-confirmation] auto-corrected email",
+          prep.originalDomain, "→", recipientEmail);
+      } catch (e) {
+        console.warn("[send-registration-confirmation] update lead_email failed", e);
+      }
+    }
+
+    // ─── Supressão ──────────────────────────────────────────────────
     try {
       const { data: suppressed } = await supabase
         .from("suppressed_emails")
@@ -173,6 +196,68 @@ serve(async (req) => {
       });
     }
 
+    // ─── Anti-duplicação por destinatário ───────────────────────────
+    // 1) Mesmo registration_id já enviado?
+    if (!body.force) {
+      try {
+        const { data: prevSelf } = await supabase
+          .from("email_send_log")
+          .select("id")
+          .eq("registration_id", reg.id)
+          .in("email_type", ["confirmation", "registration_confirmation"])
+          .eq("status", "sent")
+          .limit(1);
+        if (prevSelf && prevSelf.length > 0) {
+          console.log("[send-registration-confirmation] already sent for this registration", reg.id);
+          return new Response(JSON.stringify({ ok: true, alreadySent: true }), {
+            status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+      } catch (e) {
+        console.warn("[send-registration-confirmation] dedupe self check failed", e);
+      }
+
+      // 2) Mesmo destinatário + mesmo evento nos últimos 30 dias?
+      try {
+        const since = new Date(Date.now() - DEDUPE_WINDOW_DAYS * 86400 * 1000).toISOString();
+        const { data: regsSameEmail } = await supabase
+          .from("registrations")
+          .select("id")
+          .eq("event_id", reg.event_id)
+          .ilike("lead_email", recipientEmail);
+        const otherIds = (regsSameEmail || [])
+          .map((r) => r.id as string)
+          .filter((id) => id !== reg.id);
+        if (otherIds.length > 0) {
+          const { data: prevOther } = await supabase
+            .from("email_send_log")
+            .select("id, recipient_email")
+            .in("registration_id", otherIds)
+            .in("email_type", ["confirmation", "registration_confirmation"])
+            .eq("status", "sent")
+            .gte("created_at", since)
+            .limit(1);
+          if (prevOther && prevOther.length > 0) {
+            console.log("[send-registration-confirmation] dedupe: same recipient already received for event",
+              recipientEmail, reg.event_id);
+            await logAttempt(supabase, {
+              registration_id: reg.id,
+              email_type: "confirmation",
+              recipient_email: recipientEmail,
+              status: "skipped",
+              error_message: "dedupe_recipient_event",
+            });
+            return new Response(
+              JSON.stringify({ ok: true, alreadySent: true, dedupe: "recipient_event" }),
+              { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+            );
+          }
+        }
+      } catch (e) {
+        console.warn("[send-registration-confirmation] dedupe cross check failed", e);
+      }
+    }
+
     // Schedule reminders (idempotent via UNIQUE constraint)
     try {
       await supabase.rpc("schedule_event_reminders", { p_registration_id: reg.id });
@@ -182,7 +267,7 @@ serve(async (req) => {
 
     const tracking = (reg.tracking as Record<string, unknown>) || {};
     if (tracking.confirmation_email_sent_at && !body.force) {
-      console.log("[send-registration-confirmation] Already sent, skipping", body.registrationId);
+      console.log("[send-registration-confirmation] Already sent (tracking flag), skipping", body.registrationId);
       return new Response(JSON.stringify({ ok: true, alreadySent: true }), {
         status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
@@ -240,9 +325,8 @@ serve(async (req) => {
         lower.includes("invalid `to`") ||
         lower.includes("invalid email") ||
         lower.includes("invalid_recipient");
+      const isRateLimited = resp.status === 429;
 
-      // Aciona cooldown global de 30 minutos quando o erro é de configuração
-      // do remetente — evita rajada de tentativas falhas.
       if (isDomainConfigError) {
         try {
           await supabase
@@ -254,12 +338,22 @@ serve(async (req) => {
               last_provider_error: respBody.slice(0, 500),
               updated_at: new Date().toISOString(),
             });
-        } catch (e) {
-          console.warn("[send-registration-confirmation] cooldown set failed", e);
-        }
+        } catch (_) { /* noop */ }
+      }
+      if (isRateLimited) {
+        try {
+          await supabase
+            .from("email_send_state")
+            .upsert({
+              id: 1,
+              cooldown_until: new Date(Date.now() + 60 * 1000).toISOString(),
+              last_provider_status: 429,
+              last_provider_error: respBody.slice(0, 500),
+              updated_at: new Date().toISOString(),
+            });
+        } catch (_) { /* noop */ }
       }
 
-      // Suprime endereços claramente inválidos (4xx específicos do destinatário).
       if (isInvalidRecipient) {
         try {
           await supabase.from("suppressed_emails").upsert({
@@ -267,9 +361,7 @@ serve(async (req) => {
             reason: "invalid_recipient",
             source: "send-registration-confirmation",
           });
-        } catch (e) {
-          console.warn("[send-registration-confirmation] suppression upsert failed", e);
-        }
+        } catch (_) { /* noop */ }
       }
 
       await logAttempt(supabase, {
@@ -287,15 +379,13 @@ serve(async (req) => {
       );
     }
 
-    // Envio OK: limpa cooldown se estava setado.
+    // Envio OK
     try {
       await supabase
         .from("email_send_state")
         .update({ cooldown_until: null, updated_at: new Date().toISOString() })
         .eq("id", 1);
-    } catch (e) {
-      console.warn("[send-registration-confirmation] cooldown clear failed", e);
-    }
+    } catch (_) { /* noop */ }
 
     await supabase
       .from("registrations")
@@ -313,7 +403,7 @@ serve(async (req) => {
     });
 
     console.log("[send-registration-confirmation] Sent", recipientEmail);
-    return new Response(JSON.stringify({ ok: true }), {
+    return new Response(JSON.stringify({ ok: true, corrected: prep.corrected }), {
       status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (e) {

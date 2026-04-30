@@ -26,31 +26,60 @@ import { trackPageView, buildInitialPayload } from "@/lib/visitorTracking";
 // Regex simples para validação de e-mail (mais estrita do que `type="email"`).
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 
+// Caracteres invisíveis comuns em colagens (zero-width, NBSP, BOM).
+const INVISIBLE_RE = /[\u00A0\u200B\u200C\u200D\u2060\uFEFF]/g;
+
 // Sugestão de correção para domínios mais comuns escritos errado.
-// Reduz drasticamente bounces "invalid recipient" no Resend.
+// Mantida em sync com supabase/functions/_shared/email-validate.ts.
 const EMAIL_DOMAIN_TYPOS: Record<string, string> = {
   "gmial.com": "gmail.com",
   "gmal.com": "gmail.com",
   "gmai.com": "gmail.com",
   "gmail.co": "gmail.com",
   "gmail.con": "gmail.com",
+  "gmail.cm": "gmail.com",
+  "gmail.comm": "gmail.com",
   "gnail.com": "gmail.com",
+  "gmsil.com": "gmail.com",
+  "gmaill.com": "gmail.com",
   "hotnail.com": "hotmail.com",
   "hotmial.com": "hotmail.com",
   "hotmai.com": "hotmail.com",
   "hotmail.con": "hotmail.com",
   "hotmail.co": "hotmail.com",
+  "hotmail.cm": "hotmail.com",
+  "homail.com": "hotmail.com",
   "outlok.com": "outlook.com",
   "outloo.com": "outlook.com",
   "outlook.con": "outlook.com",
+  "outlook.cm": "outlook.com",
+  "outllok.com": "outlook.com",
   "yaho.com": "yahoo.com",
   "yahho.com": "yahoo.com",
   "yahoo.con": "yahoo.com",
+  "yhoo.com": "yahoo.com",
   "icloud.con": "icloud.com",
   "iclod.com": "icloud.com",
+  "icould.com": "icloud.com",
+  "icluod.com": "icloud.com",
   "uol.com": "uol.com.br",
   "bol.com": "bol.com.br",
+  "globomail.com": "globo.com",
+  "terra.com": "terra.com.br",
 };
+
+// Normalização avançada: remove invisíveis, trim, lowercase, conserta vírgula
+// no domínio e ponto final acidental, e aplica correção de typo conhecido.
+function normalizeEmail(raw: string): string {
+  let v = (raw || "").replace(INVISIBLE_RE, "").trim().toLowerCase().replace(/\.+$/, "");
+  const at = v.lastIndexOf("@");
+  if (at < 1) return v;
+  const local = v.slice(0, at);
+  let domain = v.slice(at + 1).replace(/,/g, ".");
+  const fixed = EMAIL_DOMAIN_TYPOS[domain];
+  if (fixed && fixed !== domain) domain = fixed;
+  return `${local}@${domain}`;
+}
 
 function suggestEmailFix(email: string): string | null {
   const v = (email || "").trim().toLowerCase();
@@ -853,7 +882,7 @@ const Register = () => {
         }
         const isEmailField = f.field_type === "email" || /e-?mail/i.test(f.label);
         if (isEmailField && typeof normalizedData[f.label] === "string") {
-          normalizedData[f.label] = normalizedData[f.label].trim().toLowerCase();
+          normalizedData[f.label] = normalizeEmail(normalizedData[f.label]);
         }
       });
       const registrationId = (await createReg.mutateAsync({ event_id: event.id, data: normalizedData, tracking: utms })) as unknown as string;
