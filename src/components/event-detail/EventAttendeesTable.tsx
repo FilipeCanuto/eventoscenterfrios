@@ -1,11 +1,12 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Search, Download, Loader2, ArrowUp, ArrowDown, ArrowUpDown, ChevronLeft, ChevronRight, Trash2, CheckCircle } from "lucide-react";
+import { Search, Download, Loader2, ArrowUp, ArrowDown, ArrowUpDown, ChevronLeft, ChevronRight, Trash2, CheckCircle, MailWarning } from "lucide-react";
+import { fetchPendingConfirmations, runBackfillConfirmations } from "@/hooks/useRegistrationEmails";
 import { useRegistrationsByEvent, useCancelRegistration, useCheckInRegistration } from "@/hooks/useRegistrations";
 import RegistrationDetailDialog from "@/components/dashboard/RegistrationDetailDialog";
 import {
@@ -56,6 +57,37 @@ export default function EventAttendeesTable({ eventId }: { eventId: string }) {
   const { data: registrations, isLoading } = useRegistrationsByEvent(eventId);
   const cancelMut = useCancelRegistration();
   const checkInMut = useCheckInRegistration();
+  const [pendingCount, setPendingCount] = useState<number | null>(null);
+  const [backfilling, setBackfilling] = useState(false);
+  const [confirmBackfill, setConfirmBackfill] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetchPendingConfirmations(eventId)
+      .then((res) => { if (!cancelled) setPendingCount(res.pending); })
+      .catch(() => { if (!cancelled) setPendingCount(null); });
+    return () => { cancelled = true; };
+  }, [eventId, registrations?.length]);
+
+  const handleBackfill = async () => {
+    setBackfilling(true);
+    setConfirmBackfill(false);
+    try {
+      const res = await runBackfillConfirmations(eventId);
+      const parts: string[] = [];
+      if (res.sent) parts.push(`${res.sent} enviados`);
+      if (res.skipped_delivered) parts.push(`${res.skipped_delivered} já entregues no Resend`);
+      if (res.skipped_suppressed) parts.push(`${res.skipped_suppressed} bloqueados`);
+      if (res.failed) parts.push(`${res.failed} falharam`);
+      toast.success(`Reenvio concluído: ${parts.join(", ") || "nada a fazer"}`);
+      const refreshed = await fetchPendingConfirmations(eventId);
+      setPendingCount(refreshed.pending);
+    } catch (e: any) {
+      toast.error(e?.message || "Erro ao reenviar");
+    } finally {
+      setBackfilling(false);
+    }
+  };
 
   const handleSort = (col: SortColumn) => {
     if (sortColumn === col) setSortDir(d => d === "asc" ? "desc" : "asc");
@@ -167,6 +199,17 @@ export default function EventAttendeesTable({ eventId }: { eventId: string }) {
             <Switch id="hide-cancelled-evt" checked={hideCancelled} onCheckedChange={(v) => { setHideCancelled(v); setPage(0); }} />
             <Label htmlFor="hide-cancelled-evt" className="text-xs cursor-pointer">Ocultar canceladas</Label>
           </div>
+          {pendingCount !== null && pendingCount > 0 && (
+            <Button
+              variant="outline" size="sm"
+              className="h-8 text-xs shrink-0 rounded-full border-amber-500/40 text-amber-700 hover:bg-amber-50 dark:text-amber-400"
+              onClick={() => setConfirmBackfill(true)}
+              disabled={backfilling}
+            >
+              {backfilling ? <Loader2 className="w-3.5 h-3.5 mr-1 animate-spin" /> : <MailWarning className="w-3.5 h-3.5 mr-1" />}
+              Reenviar {pendingCount} confirmação{pendingCount > 1 ? "ões" : ""} pendente{pendingCount > 1 ? "s" : ""}
+            </Button>
+          )}
           <Button variant="outline" size="sm" className="h-8 text-xs shrink-0 rounded-full" onClick={handleExportCSV}>
             <Download className="w-3.5 h-3.5 mr-1" /> Exportar
           </Button>
@@ -308,6 +351,24 @@ export default function EventAttendeesTable({ eventId }: { eventId: string }) {
             <AlertDialogCancel className="rounded-full">Voltar</AlertDialogCancel>
             <AlertDialogAction onClick={handleCancel} className="rounded-full bg-destructive text-destructive-foreground hover:bg-destructive/90">
               Sim, cancelar
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={confirmBackfill} onOpenChange={setConfirmBackfill}>
+        <AlertDialogContent className="rounded-2xl">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Reenviar confirmações pendentes?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Vamos enviar a confirmação para <strong>{pendingCount}</strong> inscrito{pendingCount === 1 ? "" : "s"} que ainda não receberam.
+              Antes de cada envio, verificamos no Resend se a mensagem já foi entregue — quem já recebeu é pulado automaticamente.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel className="rounded-full">Voltar</AlertDialogCancel>
+            <AlertDialogAction onClick={handleBackfill} className="rounded-full">
+              Enviar agora
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

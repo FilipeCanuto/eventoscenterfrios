@@ -4,6 +4,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import RegistrationEmailsTab from "@/components/dashboard/RegistrationEmailsTab";
+import RegistrationTemplatesTab from "@/components/dashboard/RegistrationTemplatesTab";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -290,7 +293,14 @@ export default function RegistrationDetailDialog({ registration, onClose }: Prop
             </DialogDescription>
           </DialogHeader>
 
-          <div className="space-y-5">
+          <Tabs defaultValue="dados" className="w-full">
+            <TabsList className="grid grid-cols-3 w-full rounded-full h-9 mb-4">
+              <TabsTrigger value="dados" className="rounded-full text-xs">Dados</TabsTrigger>
+              <TabsTrigger value="emails" className="rounded-full text-xs">E-mails</TabsTrigger>
+              <TabsTrigger value="templates" className="rounded-full text-xs">Templates</TabsTrigger>
+            </TabsList>
+
+            <TabsContent value="dados" className="space-y-5 mt-0">
             {/* E-mail status */}
             <div className={`flex items-center gap-2 text-xs rounded-xl px-3 py-2 ${confirmationSentAt ? "bg-success/10 text-success" : "bg-amber-500/10 text-amber-700 dark:text-amber-400"}`}>
               {confirmationSentAt ? (
@@ -465,7 +475,20 @@ export default function RegistrationDetailDialog({ registration, onClose }: Prop
                 </div>
               </section>
             )}
-          </div>
+            </TabsContent>
+
+            <TabsContent value="emails" className="mt-0">
+              <RegistrationEmailsTab
+                registrationId={registration.id}
+                recipientEmail={getEmail(registration)}
+                status={registration.status}
+              />
+            </TabsContent>
+
+            <TabsContent value="templates" className="mt-0">
+              <RegistrationTemplatesTab registrationId={registration.id} />
+            </TabsContent>
+          </Tabs>
 
           <DialogFooter className="flex-col sm:flex-row gap-2">
             {editing ? (
