@@ -199,6 +199,17 @@ export default function EventAttendeesTable({ eventId }: { eventId: string }) {
             <Switch id="hide-cancelled-evt" checked={hideCancelled} onCheckedChange={(v) => { setHideCancelled(v); setPage(0); }} />
             <Label htmlFor="hide-cancelled-evt" className="text-xs cursor-pointer">Ocultar canceladas</Label>
           </div>
+          {pendingCount !== null && pendingCount > 0 && (
+            <Button
+              variant="outline" size="sm"
+              className="h-8 text-xs shrink-0 rounded-full border-amber-500/40 text-amber-700 hover:bg-amber-50 dark:text-amber-400"
+              onClick={() => setConfirmBackfill(true)}
+              disabled={backfilling}
+            >
+              {backfilling ? <Loader2 className="w-3.5 h-3.5 mr-1 animate-spin" /> : <MailWarning className="w-3.5 h-3.5 mr-1" />}
+              Reenviar {pendingCount} confirmação{pendingCount > 1 ? "ões" : ""} pendente{pendingCount > 1 ? "s" : ""}
+            </Button>
+          )}
           <Button variant="outline" size="sm" className="h-8 text-xs shrink-0 rounded-full" onClick={handleExportCSV}>
             <Download className="w-3.5 h-3.5 mr-1" /> Exportar
           </Button>
