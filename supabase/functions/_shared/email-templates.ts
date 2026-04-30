@@ -19,6 +19,9 @@ export interface EmailContext {
   event: EventLike;
   origin: string;
   unsubscribeToken?: string | null; // for reminders only
+  // Momento de referência usado para cálculos relativos (ex.: "faltam 24h").
+  // Deve ser o instante em que o e-mail será (ou foi) enviado. Default: now().
+  referenceDate?: Date;
 }
 
 export function escapeHtml(s: string) {
@@ -185,9 +188,10 @@ function ctaButtons(eventUrl: string, gcalUrl: string | null, brand: string) {
   </div>`;
 }
 
-function hoursUntil(eventDate: string | null) {
+function hoursUntil(eventDate: string | null, reference?: Date) {
   if (!eventDate) return null;
-  const diffMs = new Date(eventDate).getTime() - Date.now();
+  const refMs = reference ? reference.getTime() : Date.now();
+  const diffMs = new Date(eventDate).getTime() - refMs;
   return Math.max(0, Math.round(diffMs / (1000 * 60 * 60)));
 }
 
