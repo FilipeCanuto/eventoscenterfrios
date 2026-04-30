@@ -46,9 +46,10 @@ type SortDir = "asc" | "desc";
 
 const PAGE_SIZE = 15;
 
-export default function EventAttendeesTable({ eventId }: { eventId: string }) {
+export default function EventAttendeesTable({ eventId, eventName }: { eventId: string; eventName?: string }) {
   const [search, setSearch] = useState("");
   const [hideCancelled, setHideCancelled] = useState(true);
+  const [filters, setFilters] = useState<AttendeesFilterState>(EMPTY_FILTERS);
   const [sortColumn, setSortColumn] = useState<SortColumn>("date");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
   const [page, setPage] = useState(0);
@@ -60,6 +61,8 @@ export default function EventAttendeesTable({ eventId }: { eventId: string }) {
   const [pendingCount, setPendingCount] = useState<number | null>(null);
   const [backfilling, setBackfilling] = useState(false);
   const [confirmBackfill, setConfirmBackfill] = useState(false);
+
+  const filterOptions = useMemo(() => computeOptions(registrations), [registrations]);
 
   useEffect(() => {
     let cancelled = false;
