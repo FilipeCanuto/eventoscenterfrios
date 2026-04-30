@@ -2,8 +2,12 @@
 // Antes de enviar, consulta a API do Resend para confirmar que a mensagem
 // não foi marcada como "delivered" — assim evitamos duplicar envio para
 // inscritos que de fato receberam (mesmo que nosso log local não saiba).
+//
+// Ritmo seguro: envios SEQUENCIAIS, lotes de 5, 400ms entre cada item e
+// 2s entre lotes. Resultado ≈ 2 envios/seg — bem abaixo dos 10/s do Resend.
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { prepareEmailForSend } from "../_shared/email-validate.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -12,22 +16,18 @@ const corsHeaders = {
 };
 
 const RESEND_API_BASE = "https://api.resend.com";
-const GATEWAY_URL = "https://connector-gateway.lovable.dev/resend";
-const BATCH_SIZE = 8;
-const DELAY_MS = 1100; // ~6 mensagens/seg <<< 10/s do plano Resend padrão
+const BATCH_SIZE = 5;
+const PER_ITEM_DELAY_MS = 400;
+const PER_BATCH_DELAY_MS = 2000;
+const DEDUPE_WINDOW_DAYS = 30;
 
 interface Payload {
   eventId?: string | null;
-  // dryRun apenas calcula quantos seriam enviados sem realmente disparar
   dryRun?: boolean;
 }
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-// Resend não tem endpoint "list emails by recipient" estável,
-// então usamos a API de busca: GET /emails?to={email}&limit=10
-// Se o plano não suportar, o try/catch mantém o fluxo seguro
-// (default: assume não entregue → envia).
 async function alreadyDeliveredOnResend(
   email: string,
   resendApiKey: string,
@@ -63,11 +63,8 @@ serve(async (req) => {
     const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
     const SERVICE_ROLE = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const RESEND_API_KEY_RAW = Deno.env.get("RESEND_API_KEY") || "";
-    // O secret pode estar como connection-key (não começa com re_); só usamos
-    // para a checagem direta do Resend se for um api key real.
     const resendNativeKey = RESEND_API_KEY_RAW.startsWith("re_") ? RESEND_API_KEY_RAW : "";
 
-    // Verifica se o caller é admin OU dono do evento solicitado
     const userClient = createClient(SUPABASE_URL, Deno.env.get("SUPABASE_ANON_KEY")!, {
       global: { headers: { Authorization: authHeader } },
     });
@@ -85,7 +82,6 @@ serve(async (req) => {
 
     const supabase = createClient(SUPABASE_URL, SERVICE_ROLE);
 
-    // Permissão: admin global OU dono do evento alvo (se eventId fornecido)
     const { data: isAdmin } = await supabase.rpc("has_role", {
       _user_id: userId, _role: "admin",
     });
@@ -109,7 +105,6 @@ serve(async (req) => {
       });
     }
 
-    // Buscar inscrições candidatas
     let regsQuery = supabase
       .from("registrations")
       .select("id, lead_email, event_id, tracking, created_at, status")
@@ -121,7 +116,7 @@ serve(async (req) => {
     const { data: regs, error: regsErr } = await regsQuery;
     if (regsErr) throw regsErr;
 
-    // Mapear quem já tem registro 'sent' em email_send_log para confirmação
+    // Quem já tem 'sent' em email_send_log para confirmação
     const ids = (regs || []).map((r) => r.id);
     let sentSet = new Set<string>();
     if (ids.length) {
@@ -132,6 +127,38 @@ serve(async (req) => {
         .in("email_type", ["confirmation", "registration_confirmation"])
         .eq("status", "sent");
       sentSet = new Set((logs || []).map((l) => l.registration_id as string));
+    }
+
+    // Anti-duplicação cross-registration: e-mails que já receberam confirmação
+    // para o mesmo evento nos últimos 30 dias (em outra inscrição).
+    const recentSince = new Date(Date.now() - DEDUPE_WINDOW_DAYS * 86400 * 1000).toISOString();
+    let recentlyEmailedByEvent = new Map<string, Set<string>>(); // eventId -> Set(email)
+    try {
+      const { data: recentLogs } = await supabase
+        .from("email_send_log")
+        .select("recipient_email, registration_id")
+        .in("email_type", ["confirmation", "registration_confirmation"])
+        .eq("status", "sent")
+        .gte("created_at", recentSince);
+      const regIds = (recentLogs || []).map((l: any) => l.registration_id).filter(Boolean);
+      if (regIds.length > 0) {
+        const { data: regsForLogs } = await supabase
+          .from("registrations")
+          .select("id, event_id")
+          .in("id", regIds);
+        const regToEvent = new Map<string, string>(
+          (regsForLogs || []).map((r: any) => [r.id, r.event_id]),
+        );
+        for (const log of recentLogs || []) {
+          const eid = regToEvent.get((log as any).registration_id);
+          const em = ((log as any).recipient_email || "").toLowerCase();
+          if (!eid || !em) continue;
+          if (!recentlyEmailedByEvent.has(eid)) recentlyEmailedByEvent.set(eid, new Set());
+          recentlyEmailedByEvent.get(eid)!.add(em);
+        }
+      }
+    } catch (e) {
+      console.warn("[backfill] cross-dedupe load failed", e);
     }
 
     // Supressão
@@ -145,31 +172,54 @@ serve(async (req) => {
       suppressedSet = new Set((supp || []).map((s) => s.email as string));
     }
 
+    let skipped_invalid = 0, skipped_dedupe_event = 0;
+
     const candidates = (regs || []).filter((r) => {
-      const email = (r.lead_email || "").toLowerCase().trim();
-      if (!email) return false;
+      const prep = prepareEmailForSend(r.lead_email);
+      if (!prep.ok) { skipped_invalid++; return false; }
       if (sentSet.has(r.id)) return false;
-      // Tracking flag legado do envio inline
       if ((r.tracking as any)?.confirmation_email_sent_at) return false;
-      if (suppressedSet.has(email)) return false;
+      if (suppressedSet.has(prep.email)) return false;
+      const evSet = recentlyEmailedByEvent.get(r.event_id);
+      if (evSet && evSet.has(prep.email)) { skipped_dedupe_event++; return false; }
       return true;
     });
 
     if (dryRun) {
       return new Response(
-        JSON.stringify({ ok: true, pending: candidates.length, total: regs?.length || 0 }),
+        JSON.stringify({
+          ok: true, pending: candidates.length, total: regs?.length || 0,
+          skipped_invalid, skipped_dedupe_event,
+        }),
         { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
     }
 
     let sent = 0, skipped_delivered = 0, skipped_suppressed = 0, failed = 0;
+    let aborted = false;
 
     for (let i = 0; i < candidates.length; i += BATCH_SIZE) {
+      if (aborted) break;
       const batch = candidates.slice(i, i + BATCH_SIZE);
-      await Promise.all(batch.map(async (r) => {
-        const email = (r.lead_email || "").toLowerCase().trim();
 
-        // Checagem opcional contra Resend (se temos a chave nativa)
+      // SEQUENCIAL para garantir o espaçamento real
+      for (const r of batch) {
+        if (aborted) break;
+        const prep = prepareEmailForSend(r.lead_email);
+        if (!prep.ok) { skipped_invalid++; continue; }
+        const email = prep.email;
+
+        // Verifica cooldown global antes de cada envio (provedor pode ter caído mid-batch)
+        try {
+          const { data: state } = await supabase
+            .from("email_send_state").select("cooldown_until").eq("id", 1).maybeSingle();
+          if (state?.cooldown_until && new Date(state.cooldown_until as string) > new Date()) {
+            console.warn("[backfill] cooldown ativo, abortando lote");
+            aborted = true; break;
+          }
+        } catch (_) { /* noop */ }
+
+        // Resend "already delivered"
         if (resendNativeKey) {
           const delivered = await alreadyDeliveredOnResend(email, resendNativeKey);
           if (delivered) {
@@ -181,11 +231,11 @@ serve(async (req) => {
               status: "sent",
               error_message: "backfill: already delivered on resend",
             });
-            // marca tracking para não reaparecer
             await supabase.from("registrations").update({
               tracking: { ...(r.tracking as any || {}), confirmation_email_sent_at: new Date().toISOString() },
             }).eq("id", r.id);
-            return;
+            await sleep(PER_ITEM_DELAY_MS);
+            continue;
           }
         }
 
@@ -197,22 +247,30 @@ serve(async (req) => {
               "Content-Type": "application/json",
               Authorization: `Bearer ${SERVICE_ROLE}`,
             },
-            body: JSON.stringify({ registrationId: r.id, force: true }),
+            body: JSON.stringify({ registrationId: r.id }),
           });
           const json = await resp.json().catch(() => ({}));
           if (resp.ok && (json as any)?.ok) sent++;
           else if ((json as any)?.suppressed) skipped_suppressed++;
+          else if ((json as any)?.alreadySent) skipped_delivered++;
+          else if ((json as any)?.skipped) { /* cooldown */ aborted = true; }
           else failed++;
         } catch (e) {
           console.error("[backfill] send error", r.id, e);
           failed++;
         }
-      }));
-      if (i + BATCH_SIZE < candidates.length) await sleep(DELAY_MS);
+        await sleep(PER_ITEM_DELAY_MS);
+      }
+      if (i + BATCH_SIZE < candidates.length && !aborted) await sleep(PER_BATCH_DELAY_MS);
     }
 
     return new Response(
-      JSON.stringify({ ok: true, total_candidates: candidates.length, sent, skipped_delivered, skipped_suppressed, failed }),
+      JSON.stringify({
+        ok: true,
+        total_candidates: candidates.length,
+        sent, skipped_delivered, skipped_suppressed, skipped_invalid, skipped_dedupe_event,
+        failed, aborted,
+      }),
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );
   } catch (e) {

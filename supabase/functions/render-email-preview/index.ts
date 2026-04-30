@@ -1,4 +1,4 @@
-// Renderiza o HTML de um template de e-mail (confirmation, reminder_7d/1d/2h)
+// Renderiza o HTML de um template de e-mail (confirmation, reminder_1d/2h)
 // usando os dados reais do inscrito + evento. Usado pelo painel para
 // mostrar uma prévia idêntica ao que será (ou foi) enviado.
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
@@ -11,8 +11,8 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-type TemplateType = "confirmation" | "reminder_7d" | "reminder_1d" | "reminder_2h";
-const VALID: TemplateType[] = ["confirmation", "reminder_7d", "reminder_1d", "reminder_2h"];
+type TemplateType = "confirmation" | "reminder_1d" | "reminder_2h";
+const VALID: TemplateType[] = ["confirmation", "reminder_1d", "reminder_2h"];
 
 interface Payload {
   registrationId: string;
