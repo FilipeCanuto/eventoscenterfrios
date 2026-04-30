@@ -57,6 +57,37 @@ export default function EventAttendeesTable({ eventId }: { eventId: string }) {
   const { data: registrations, isLoading } = useRegistrationsByEvent(eventId);
   const cancelMut = useCancelRegistration();
   const checkInMut = useCheckInRegistration();
+  const [pendingCount, setPendingCount] = useState<number | null>(null);
+  const [backfilling, setBackfilling] = useState(false);
+  const [confirmBackfill, setConfirmBackfill] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetchPendingConfirmations(eventId)
+      .then((res) => { if (!cancelled) setPendingCount(res.pending); })
+      .catch(() => { if (!cancelled) setPendingCount(null); });
+    return () => { cancelled = true; };
+  }, [eventId, registrations?.length]);
+
+  const handleBackfill = async () => {
+    setBackfilling(true);
+    setConfirmBackfill(false);
+    try {
+      const res = await runBackfillConfirmations(eventId);
+      const parts: string[] = [];
+      if (res.sent) parts.push(`${res.sent} enviados`);
+      if (res.skipped_delivered) parts.push(`${res.skipped_delivered} já entregues no Resend`);
+      if (res.skipped_suppressed) parts.push(`${res.skipped_suppressed} bloqueados`);
+      if (res.failed) parts.push(`${res.failed} falharam`);
+      toast.success(`Reenvio concluído: ${parts.join(", ") || "nada a fazer"}`);
+      const refreshed = await fetchPendingConfirmations(eventId);
+      setPendingCount(refreshed.pending);
+    } catch (e: any) {
+      toast.error(e?.message || "Erro ao reenviar");
+    } finally {
+      setBackfilling(false);
+    }
+  };
 
   const handleSort = (col: SortColumn) => {
     if (sortColumn === col) setSortDir(d => d === "asc" ? "desc" : "asc");
