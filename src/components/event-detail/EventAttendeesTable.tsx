@@ -5,7 +5,9 @@ import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Search, Download, Loader2, ArrowUp, ArrowDown, ArrowUpDown, ChevronLeft, ChevronRight, Trash2, CheckCircle } from "lucide-react";
+import { Search, Download, Loader2, ArrowUp, ArrowDown, ArrowUpDown, ChevronLeft, ChevronRight, Trash2, CheckCircle, MailWarning } from "lucide-react";
+import { useEffect, useState as useStateAlias } from "react";
+import { fetchPendingConfirmations, runBackfillConfirmations } from "@/hooks/useRegistrationEmails";
 import { useRegistrationsByEvent, useCancelRegistration, useCheckInRegistration } from "@/hooks/useRegistrations";
 import RegistrationDetailDialog from "@/components/dashboard/RegistrationDetailDialog";
 import {
