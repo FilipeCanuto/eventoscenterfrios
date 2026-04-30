@@ -489,6 +489,8 @@ export default function RegistrationDetailDialog({ registration, onClose }: Prop
               <RegistrationTemplatesTab registrationId={registration.id} />
             </TabsContent>
           </Tabs>
+
+          <DialogFooter className="flex-col sm:flex-row gap-2">
             {editing ? (
               <>
                 <Button variant="ghost" className="rounded-full" onClick={handleCancelEdit}>
