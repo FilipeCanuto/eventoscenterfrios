@@ -293,7 +293,7 @@ export function buildReminder1d(ctx: EmailContext) {
   const checkInUrl = `${ctx.origin}/check-in/${ctx.registrationId}`;
   const qrSrc = `https://api.qrserver.com/v1/create-qr-code/?size=220x220&margin=2&data=${encodeURIComponent(checkInUrl)}`;
   const gcal = googleCalendarUrl(ev, eventUrl);
-  const hours = hoursUntil(ev.event_date);
+  const hours = hoursUntil(ev.event_date, ctx.referenceDate);
 
   const countdown = hours !== null ? `
     <div style="background:${brand};color:#fff;border-radius:14px;padding:22px;margin:0 0 20px;text-align:center">
