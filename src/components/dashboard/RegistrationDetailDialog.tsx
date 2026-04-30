@@ -4,6 +4,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import RegistrationEmailsTab from "@/components/dashboard/RegistrationEmailsTab";
+import RegistrationTemplatesTab from "@/components/dashboard/RegistrationTemplatesTab";
 import {
   AlertDialog,
   AlertDialogAction,
