@@ -79,12 +79,25 @@ serve(async (req) => {
     const previewToken = "00000000-0000-0000-0000-000000000000";
     const origin = body.origin?.replace(/\/$/, "") || "https://eventos.centerfrios.com";
 
+    // Calcula o instante em que o e-mail será enviado para refletir
+    // contagens regressivas reais (ex.: lembrete 1d => "24h", 2h => "2h").
+    let referenceDate: Date | undefined;
+    if (ev?.event_date) {
+      const evMs = new Date(ev.event_date).getTime();
+      if (body.templateType === "reminder_1d") {
+        referenceDate = new Date(evMs - 24 * 60 * 60 * 1000);
+      } else if (body.templateType === "reminder_2h") {
+        referenceDate = new Date(evMs - 2 * 60 * 60 * 1000);
+      }
+    }
+
     const built = buildEmail(body.templateType, {
       registrationId: reg.id,
       recipientName: reg.lead_name || "",
       event: ev,
       origin,
       unsubscribeToken: body.templateType === "confirmation" ? null : previewToken,
+      referenceDate,
     });
 
     return new Response(

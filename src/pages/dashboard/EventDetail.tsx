@@ -250,7 +250,7 @@ const EventDetail = () => {
         </TabsContent>
       </Tabs>
 
-      <EventAttendeesTable eventId={event.id} />
+      <EventAttendeesTable eventId={event.id} eventName={event.name} />
     </div>
   );
 };

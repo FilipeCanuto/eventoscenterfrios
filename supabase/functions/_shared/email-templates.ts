@@ -19,6 +19,9 @@ export interface EmailContext {
   event: EventLike;
   origin: string;
   unsubscribeToken?: string | null; // for reminders only
+  // Momento de referência usado para cálculos relativos (ex.: "faltam 24h").
+  // Deve ser o instante em que o e-mail será (ou foi) enviado. Default: now().
+  referenceDate?: Date;
 }
 
 export function escapeHtml(s: string) {
@@ -185,9 +188,10 @@ function ctaButtons(eventUrl: string, gcalUrl: string | null, brand: string) {
   </div>`;
 }
 
-function hoursUntil(eventDate: string | null) {
+function hoursUntil(eventDate: string | null, reference?: Date) {
   if (!eventDate) return null;
-  const diffMs = new Date(eventDate).getTime() - Date.now();
+  const refMs = reference ? reference.getTime() : Date.now();
+  const diffMs = new Date(eventDate).getTime() - refMs;
   return Math.max(0, Math.round(diffMs / (1000 * 60 * 60)));
 }
 
@@ -289,7 +293,7 @@ export function buildReminder1d(ctx: EmailContext) {
   const checkInUrl = `${ctx.origin}/check-in/${ctx.registrationId}`;
   const qrSrc = `https://api.qrserver.com/v1/create-qr-code/?size=220x220&margin=2&data=${encodeURIComponent(checkInUrl)}`;
   const gcal = googleCalendarUrl(ev, eventUrl);
-  const hours = hoursUntil(ev.event_date);
+  const hours = hoursUntil(ev.event_date, ctx.referenceDate);
 
   const countdown = hours !== null ? `
     <div style="background:${brand};color:#fff;border-radius:14px;padding:22px;margin:0 0 20px;text-align:center">
