@@ -1,131 +1,117 @@
-## Diagnóstico
+# Plano: recuperação de confirmações + central de e-mails por inscrito
 
-### 1. Inscrições ainda com dificuldade
+## 1. Diagnóstico (o que descobri no banco)
 
-A correção anterior removeu o `Select` instável, mas o formulário público ainda usa o `Checkbox` da Radix para:
+Antes de propor a solução, fiz um levantamento direto na base:
 
-- campo de múltipla escolha “Dias de Comparecimento”;
-- aceite da política/LGPD.
+- **123 inscritos** com status `registered`.
+- **0 registros** em `email_send_log` com confirmação enviada com sucesso.
+- **246 lembretes pendentes** (`reminder_1d` e `reminder_2h`) já programados — esses vão sair normalmente agora que o Resend voltou.
+- **48 lembretes `reminder_7d**` já marcados como `sent` (do período antes da queda).
+- A confirmação de inscrição **não é agendada** em `scheduled_emails` — ela é disparada inline no momento do cadastro. Como o domínio estava rejeitando, **nenhum dos 123 inscritos atuais recebeu o e-mail de confirmação.**
 
-Esse componente também usa uma estrutura dinâmica interna que pode sofrer o mesmo tipo de conflito em navegadores embutidos de WhatsApp/Instagram, Android WebView, tradução automática e conexões instáveis. Como o evento atual tem um campo `multiselect` obrigatório, isso ainda pode impedir alguns usuários de concluir a inscrição.
+Conclusão: precisamos de uma **operação de recuperação** (resend em lote) + a **central de e-mails por inscrito** que você pediu.
 
-Além disso, o formulário ainda usa animações `framer-motion` ao redor da área de inscrição. Elas não são a causa principal, mas aumentam o risco de inconsistência de DOM em WebViews problemáticos.
+---
 
-Os dados mostram que nas últimas 24h houve inscrições concluídas, mas também abandono de formulário após início, principalmente em mobile. Não apareceu erro atual no console capturado, então a correção deve ser defensiva e focada em remover os últimos pontos frágeis do fluxo público.
+## 2. O que vou construir
 
-### 2. E-mails não enviados / Resend com “Bounced”
+### Parte A — Recuperar os inscritos que não receberam confirmação
 
-Os logs do envio de confirmação mostram repetidamente:
+**A.1. Detecção automática de "pendentes"**
+Criar uma view/consulta que identifica todo `registration` com status `registered` que **não** tem registro `sent` em `email_send_log` para `email_type = 'registration_confirmation'`. Esses são os candidatos ao reenvio.
 
-```text
-The eventos.centerfrios.com domain is not verified
-```
+**A.2. Edge function `backfill-confirmations**` (nova)
 
-Ou seja: o envio está falhando porque o domínio usado no remetente `eventos@eventos.centerfrios.com` não está verificado no provedor de envio configurado atualmente. Isso explica por que muitas confirmações não chegam.
+- Recebe opcionalmente um `eventId` (ou roda para todos os eventos do admin).
+- Lista os inscritos pendentes da consulta acima.
+- Filtra: ignora e-mails na `suppressed_emails` e e-mails inválidos.
+- Dispara `send-registration-confirmation` em lotes pequenos (10 por rodada, com 1s de pausa) para respeitar o rate-limit do Resend e evitar bounce em cascata.
+- Registra cada tentativa em `email_send_log` (já existe a infra).
+- Retorna `{ scheduled, skipped_suppressed, skipped_invalid, failed }` para feedback no UI.
 
-Também há um problema de volume/retry: a rotina de lembretes tenta reenviar confirmações pendentes, mas como o domínio não está verificado, ela gera várias tentativas falhas em sequência. Hoje existem centenas de lembretes pendentes, e parte dos registros recentes não está marcada como e-mail enviado.
+**A.3. Botão "Reenviar confirmações pendentes" no painel**
 
-Sobre “Bounced”: existem dois grupos de causa:
+- Na tela do evento (em `EventAttendeesTable.tsx` / `EventDetailHeader.tsx`), adicionar um botão discreto que:
+  1. Mostra a contagem de pendentes ("23 inscritos sem confirmação").
+  2. Ao clicar, abre confirmação ("Enviar 23 e-mails agora?") e dispara a function.
+  3. Mostra toast de progresso e atualiza a contagem ao fim.
 
-1. **Falha de domínio/remetente**: se o provedor não reconhece o domínio como verificado, os envios falham antes ou durante a entrega.
-2. **Qualidade dos destinatários**: e-mails digitados incorretamente, caixas inexistentes, domínios inválidos ou corporativos com bloqueio. O app hoje valida apenas o formato básico do e-mail, mas não faz validação defensiva mais forte nem evita reenviar para endereços que já falharam.
+### Parte B — Aba "E-mails" no card do inscrito (`RegistrationDetailDialog`)
 
-## Plano de correção segura
+Adicionar abas no diálogo do inscrito: **Dados | E-mails | Templates**.
 
-### A. Blindar definitivamente o fluxo público de inscrição
+**B.1. Aba "E-mails" — histórico do que esse inscrito recebeu**
 
-1. **Substituir o Checkbox Radix por inputs nativos no `Register.tsx`**
-   - Campo `multiselect`: trocar por `<input type="checkbox">` nativo.
-   - Aceite LGPD: trocar por `<input type="checkbox">` nativo.
-   - Manter o visual atual com Tailwind, touch target grande e layout mobile-first.
-   - Resultado: o fluxo público fica sem Radix em inputs críticos.
+- Tabela com: tipo (`Confirmação`, `Lembrete 7d`, `Lembrete 1d`, `Lembrete 2h`), status (Enviado / Falhou / Pendente / Cancelado), data, código de erro do provedor (se houver).
+- Combina dados de `email_send_log` (envios efetivos) + `scheduled_emails` (programados/pendentes/falhados).
+- Botão **"Reenviar confirmação"** ao lado da linha de confirmação se o status for `failed` ou inexistente — chama `send-registration-confirmation` com `force: true`.
+- Aviso visível se o e-mail estiver na lista de supressão, com o motivo.
 
-2. **Reduzir animações no formulário público**
-   - Substituir os wrappers `motion.div` da página de inscrição por `div` comum, ou manter somente animações não críticas na tela de sucesso.
-   - Isso reduz risco de conflito com DOM em WebViews sem alterar funcionalidade.
+**B.2. Programados futuros**  
+Mostra na mesma tabela (badge "Programado para 30/04 às 14h") os lembretes ainda não enviados, com data/hora prevista no fuso do evento. (analisar a possibilidade da inclusão de um botão de editar a data do envio dos e-mails programados )
 
-3. **Melhorar recuperação em caso de erro inesperado**
-   - Atualizar `ErrorBoundary` para ter:
-     - “Tentar novamente” com remount real;
-     - “Recarregar página” com reload completo;
-     - “Voltar ao início”.
-   - A versão atual já recarrega ao clicar em “Tentar novamente”, mas não oferece uma segunda opção clara nem remount sem reload.
+**B.3. Aba "Templates" — prévia + download**
 
-4. **Mensagens de erro mais amigáveis no submit**
-   - Mapear erros técnicos comuns da inscrição para mensagens em pt-BR:
-     - evento lotado;
-     - prazo encerrado;
-     - e-mail já usado;
-     - dados inválidos.
-   - Isso evita que o usuário veja uma mensagem genérica e tente repetir sem entender o motivo.
+- Renderiza no client uma prévia HTML (iframe sandboxed) de cada um dos 4 templates **personalizados com os dados reais daquele inscrito e do evento** (mesmas funções de `_shared/email-templates.ts` reaproveitadas no front via uma function `render-email-template`).
+- Para cada template:
+  - Botão **"Baixar PNG (alta qualidade)"** — usa `html2canvas` em escala 3x sobre o iframe renderizado, gerando PNG ~retina.
+  - Botão **"Baixar PDF"** — usa `jsPDF` com a imagem capturada, página A4.
+  - Botão **"Baixar HTML"** — salva o `.html` puro (útil para devs/marketing).
 
-### B. Corrigir envio de e-mails
+### Parte C — Hardenings adicionais ("como melhorar ainda mais")
 
-1. **Parar o efeito cascata de tentativas falhas**
-   - Ajustar a rotina de reenvio/catch-up para não disparar confirmações repetidas quando o erro é de configuração de domínio/remetente.
-   - Implementar cooldown/backoff simples para evitar dezenas de chamadas em segundos quando o provedor responde erro 403 de domínio.
+Aproveitando que estamos tocando nesse fluxo, três melhorias defensivas para **evitar que o problema reapareça**:
 
-2. **Configurar o envio pelo caminho correto**
-   - O projeto não tem domínio de e-mail gerenciado configurado no Lovable Cloud neste momento.
-   - Para resolver de forma robusta, precisamos configurar um domínio/remetente de e-mail no Cloud e migrar o envio de confirmações/lembretes para a infraestrutura de e-mail do app, com fila, logs, retries e supressão.
-   - Se a intenção for continuar especificamente com Resend, será necessário verificar o domínio `eventos.centerfrios.com` no Resend e garantir que a chave usada esteja vinculada ao mesmo domínio do remetente.
+1. **Re-envio automático no próximo `process-reminder-queue**`: a function que já roda periodicamente passa também a varrer confirmações `failed`/`missing` recentes (últimas 48h) e tenta de novo, respeitando cooldown e supressão. Isso significa que mesmo sem ação manual, futuros incidentes se auto-corrigem assim que o domínio volta.
+2. **Painel de saúde de e-mails**: pequeno card no topo de `/dashboard/attendees` mostrando "Últimas 24h: X enviados, Y falhados, Z em cooldown" (deduplicado por `message_id`). Visibilidade imediata de problemas.
+3. **Validação proativa do domínio**: a `send-registration-confirmation` testa o status do domínio Resend uma vez por hora (cache em `email_send_state`) e, se estiver `not_verified`, retorna 200 + `queued_for_later` em vez de 403, gravando o registro como `pending_domain` para reenvio automático posterior. Isso elimina o "erro vermelho" para o inscrito.
 
-3. **Remetente correto para reduzir bounce**
-   - Usar um subdomínio de envio próprio e autenticado, por exemplo `eventos@notify.centerfrios.com` ou equivalente configurado.
-   - Manter `reply-to` como `contato@eventos.centerfrios.com`, se desejado.
-   - Evitar enviar a partir de domínio não verificado.
+---
 
-4. **Não prometer e-mail quando ele falhar**
-   - Na tela de sucesso, alterar o texto para algo mais seguro, por exemplo:
-     - “Sua inscrição está confirmada. Se o e-mail não chegar, salve esta página ou entre em contato com a equipe.”
-   - Isso evita frustração enquanto o domínio estiver sendo regularizado.
+## 3. Detalhes técnicos
 
-### C. Reduzir drasticamente “Bounced”
+**Arquivos novos**
 
-1. **Validação de e-mail mais forte antes de enviar**
-   - Normalizar e-mails: trim, lowercase e remoção de espaços invisíveis.
-   - Bloquear padrões claramente inválidos:
-     - domínio sem ponto;
-     - finais incompletos;
-     - erros comuns como `gmai.com`, `hotnail.com`, `hotmai.com`, `outlok.com`.
-   - Para erros prováveis, mostrar sugestão: “Você quis dizer gmail.com?”
+- `supabase/functions/backfill-confirmations/index.ts`
+- `supabase/functions/render-email-preview/index.ts` (retorna HTML renderizado para um `registrationId` + `templateType`, reusa `_shared/email-templates.ts`)
+- `src/components/dashboard/RegistrationEmailsTab.tsx`
+- `src/components/dashboard/RegistrationTemplatesTab.tsx`
+- `src/hooks/useRegistrationEmails.ts`
+- Migração: índice `email_send_log(registration_id, email_type, status)` para acelerar consultas.
 
-2. **Supressão local de destinatários problemáticos**
-   - Criar/usar lista de e-mails suprimidos para não reenviar para endereços que já deram bounce/falha permanente.
-   - Antes de enviar confirmação ou lembrete, checar se o e-mail está suprimido.
+**Arquivos editados**
 
-3. **Registrar status de envio**
-   - Registrar tentativas e falhas em uma tabela de log para distinguir:
-     - enviado;
-     - pendente;
-     - falha temporária;
-     - falha permanente/bounce;
-     - suprimido.
-   - Isso permite agir com dados, sem depender só do painel externo.
+- `src/components/dashboard/RegistrationDetailDialog.tsx` — adiciona `<Tabs>` com 3 abas.
+- `src/components/event-detail/EventAttendeesTable.tsx` — botão "Reenviar pendentes".
+- `supabase/functions/send-registration-confirmation/index.ts` — modo `queued_for_later` quando domínio não verificado.
+- `supabase/functions/process-reminder-queue/index.ts` — varre confirmações falhadas recentes.
 
-4. **Botão de correção/reenvio no painel**
-   - Quando o e-mail estiver inválido ou falhar, o organizador poderá corrigir o endereço no detalhe da inscrição e reenviar.
-   - O código já tem parte desse fluxo; vamos garantir que ele respeite a nova validação e não reenvie para suprimidos sem correção.
+**Dependências novas no front**
 
-## Arquivos que serão alterados
+- `html2canvas` (~45kb gz) — captura DOM em alta resolução.
+- `jspdf` (~80kb gz) — geração de PDF client-side.
+Ambas tree-shakable e carregadas só na aba de templates (lazy import).
 
-- `src/pages/Register.tsx`
-- `src/components/ErrorBoundary.tsx`
-- `supabase/functions/send-registration-confirmation/index.ts`
-- `supabase/functions/process-reminder-queue/index.ts`
-- Possível novo arquivo utilitário para validação de e-mail compartilhada no frontend
-- Possível migração para tabela de supressão/log, caso não seja usada a infraestrutura de e-mail gerenciada do Cloud
+**RLS / segurança**
 
-## O que depende de configuração externa
+- `email_send_log` já tem policy de admin select; o front consulta via hook que respeita RLS.
+- A function `backfill-confirmations` valida `auth.uid()` e exige `has_role(uid, 'admin')` antes de rodar.
+- Iframe da prévia é `sandbox="allow-same-origin"` (sem scripts), apenas para renderizar HTML.
 
-A correção de estabilidade da inscrição pode ser aplicada só no código.
+**Performance / custo**
 
-A correção definitiva dos e-mails depende de um remetente verificado. Sem domínio/remetente verificado, qualquer código continuará falhando ou gerando bounce. A opção mais segura é configurar o domínio de e-mail no Lovable Cloud e usar o envio gerenciado do app.
+- Backfill em lotes de 10 com 1s de espaço evita estourar quota do Resend (100/s no plano padrão).
+- Renderização de templates é cacheada por `registrationId+templateType` no React Query (5 min).
 
-## Resultado esperado
+---
 
-- Menos falhas de inscrição em mobile e navegadores embutidos.
-- Formulário público sem dependência de componentes complexos nos inputs críticos.
-- E-mails deixando de falhar por domínio não verificado após configuração do remetente.
-- Redução grande de bounce por validação, supressão e menor repetição de envios falhos.
-- Melhor visibilidade para a equipe sobre quais confirmações foram enviadas ou precisam de correção.
+## 4. Resultado esperado
+
+1. Os 123 inscritos atuais que não receberam confirmação podem ser recuperados em 1 clique (~2 minutos para enviar todos).
+2. Para qualquer inscrito futuro, você abre o card → aba **E-mails** e vê exatamente o que ele recebeu, o que vai receber, e pode reenviar/baixar tudo.
+3. Se o domínio cair de novo, o sistema **não perde** envios — eles ficam em `pending_domain` e são reenviados automaticamente quando voltar.
+
+Posso aplicar?  
+  
+Certifique-se de enviar o e-mail de confirmação de cadastro apenas para os contatos que não estão marcados com "delivered" no Resend.
