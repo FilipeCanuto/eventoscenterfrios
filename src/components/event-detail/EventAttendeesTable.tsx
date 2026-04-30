@@ -115,57 +115,21 @@ export default function EventAttendeesTable({ eventId, eventName }: { eventId: s
   };
 
   const filtered = useMemo(() => {
-    let items = registrations?.filter(r => {
-      if (hideCancelled && r.status === "cancelled") return false;
-      if (!search) return true;
-      const data = r.data as Record<string, string>;
-      return Object.values(data).some(v => typeof v === "string" && v.toLowerCase().includes(search.toLowerCase()));
-    }) || [];
-
+    const items = applyFilters(registrations, filters, search, hideCancelled);
     items.sort((a, b) => {
       const va = getValue(a, sortColumn);
       const vb = getValue(b, sortColumn);
       const cmp = va < vb ? -1 : va > vb ? 1 : 0;
       return sortDir === "asc" ? cmp : -cmp;
     });
-
     return items;
-  }, [registrations, search, hideCancelled, sortColumn, sortDir]);
+  }, [registrations, filters, search, hideCancelled, sortColumn, sortDir]);
 
   const totalPages = Math.ceil(filtered.length / PAGE_SIZE);
   const paged = filtered.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
 
-  const handleExportCSV = () => {
-    if (!filtered?.length) return;
-    const headers = ["Nome", "E-mail", "WhatsApp", "Status", "Origem", "Dias", "Inscrição", "Check-in em"];
-    const rows = filtered.map((r: any) => {
-      const data = r.data as Record<string, string>;
-      return [
-        r.lead_name || data["Full Name"] || data["Name"] || "",
-        r.lead_email || data["Email Address"] || data["Email"] || "",
-        r.lead_whatsapp || data["WhatsApp"] || data["Telefone"] || "",
-        statusLabels[r.status] || r.status,
-        getSource(r),
-        data["Dias de Comparecimento"] || "",
-        format(new Date(r.created_at), "d MMM yyyy HH:mm", { locale: ptBR }),
-        r.checked_in_at ? format(new Date(r.checked_in_at), "d MMM yyyy HH:mm", { locale: ptBR }) : "",
-      ];
-    });
-    const escapeCSV = (val: string): string => {
-      const str = String(val ?? "");
-      const safe = str.replace(/^([=+\-@])/, "'$1");
-      if (safe.includes(',') || safe.includes('"') || safe.includes('\n')) return `"${safe.replace(/"/g, '""')}"`;
-      return safe;
-    };
-    const csv = [headers, ...rows].map(r => r.map(escapeCSV).join(",")).join("\n");
-    const blob = new Blob([csv], { type: "text/csv" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = "participantes.csv";
-    a.click();
-    URL.revokeObjectURL(url);
-  };
+  const exportFilename = `participantes_${(eventName || "evento").toLowerCase().replace(/\s+/g, "-")}_${format(new Date(), "yyyy-MM-dd")}`;
+  const filtersDescription = describeFilters(filters, search, hideCancelled, eventName || null);
 
   const handleCancel = async () => {
     if (!confirmCancelId) return;
@@ -213,9 +177,16 @@ export default function EventAttendeesTable({ eventId, eventName }: { eventId: s
               Reenviar {pendingCount} confirmação{pendingCount > 1 ? "ões" : ""} pendente{pendingCount > 1 ? "s" : ""}
             </Button>
           )}
-          <Button variant="outline" size="sm" className="h-8 text-xs shrink-0 rounded-full" onClick={handleExportCSV}>
-            <Download className="w-3.5 h-3.5 mr-1" /> Exportar
-          </Button>
+          <AttendeesFilters
+            value={filters}
+            onChange={(v) => { setFilters(v); setPage(0); }}
+            options={filterOptions}
+          />
+          <ExportMenu
+            items={filtered}
+            filename={exportFilename}
+            filtersDescription={filtersDescription}
+          />
         </div>
       </div>
 
