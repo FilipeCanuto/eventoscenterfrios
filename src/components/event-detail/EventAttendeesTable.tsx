@@ -355,6 +355,24 @@ export default function EventAttendeesTable({ eventId }: { eventId: string }) {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <AlertDialog open={confirmBackfill} onOpenChange={setConfirmBackfill}>
+        <AlertDialogContent className="rounded-2xl">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Reenviar confirmações pendentes?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Vamos enviar a confirmação para <strong>{pendingCount}</strong> inscrito{pendingCount === 1 ? "" : "s"} que ainda não receberam.
+              Antes de cada envio, verificamos no Resend se a mensagem já foi entregue — quem já recebeu é pulado automaticamente.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel className="rounded-full">Voltar</AlertDialogCancel>
+            <AlertDialogAction onClick={handleBackfill} className="rounded-full">
+              Enviar agora
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
