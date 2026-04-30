@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { buildEmail } from "../_shared/email-templates.ts";
+import { prepareEmailForSend } from "../_shared/email-validate.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -12,7 +13,10 @@ const GATEWAY_URL = "https://connector-gateway.lovable.dev/resend";
 const FROM_ADDRESS = "Eventos Centerfrios <eventos@eventos.centerfrios.com>";
 const REPLY_TO_ADDRESS = "contato@eventos.centerfrios.com";
 const PUBLIC_ORIGIN = "https://eventos.centerfrios.com";
-const BATCH_SIZE = 25;
+const BATCH_SIZE = 15;
+const PER_ITEM_DELAY_MS = 300; // ~3/s, bem abaixo do rate limit do Resend
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
@@ -34,8 +38,6 @@ serve(async (req) => {
     );
 
     // ─── Cooldown global ──────────────────────────────────────────────
-    // Se o provedor está em erro de configuração (ex.: domínio não
-    // verificado), não geramos rajada de tentativas. Apenas reportamos.
     try {
       const { data: state } = await supabase
         .from("email_send_state")
@@ -53,7 +55,7 @@ serve(async (req) => {
       console.warn("[process-reminder-queue] cooldown check failed", e);
     }
 
-    // Pré-carrega lista de e-mails suprimidos para evitar reenvio.
+    // Pré-carrega supressões.
     let suppressedSet = new Set<string>();
     try {
       const { data: sup } = await supabase.from("suppressed_emails").select("email");
@@ -62,12 +64,18 @@ serve(async (req) => {
       console.warn("[process-reminder-queue] suppression load failed", e);
     }
 
+    // Cancela qualquer reminder_7d remanescente (produto descontinuado).
+    try {
+      await supabase
+        .from("scheduled_emails")
+        .update({ status: "cancelled", error: "reminder_7d_disabled", updated_at: new Date().toISOString() })
+        .eq("email_type", "reminder_7d")
+        .eq("status", "pending");
+    } catch (e) {
+      console.warn("[process-reminder-queue] cancel reminder_7d failed", e);
+    }
+
     // ---- Catch-up: re-trigger missing confirmation emails ----
-    // Idempotent safety net for cases where the client never reached
-    // send-registration-confirmation (network drop, function cold-start 503,
-    // browser closed before the fire-and-forget fetch completed, etc.).
-    // The target function self-skips when tracking.confirmation_email_sent_at
-    // is already set, so re-invoking is safe.
     let confirmationCatchUp = 0;
     try {
       const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
@@ -85,12 +93,13 @@ serve(async (req) => {
         return e && !suppressedSet.has(e);
       });
       // Limita o catch-up para não gerar rajada se houver backlog grande.
-      for (const r of pending.slice(0, 10)) {
+      for (const r of pending.slice(0, 5)) {
         try {
           await supabase.functions.invoke("send-registration-confirmation", {
             body: { registrationId: r.id },
           });
           confirmationCatchUp++;
+          await sleep(PER_ITEM_DELAY_MS);
         } catch (e) {
           console.warn("[process-reminder-queue] catch-up failed", r.id, e);
         }
@@ -102,11 +111,12 @@ serve(async (req) => {
       console.warn("[process-reminder-queue] catch-up scan failed", e);
     }
 
-    // Pull batch of due pending emails
+    // Pull batch of due pending emails (excluindo reminder_7d)
     const { data: due, error: dueErr } = await supabase
       .from("scheduled_emails")
       .select("id, registration_id, event_id, email_type, unsubscribe_token, attempts")
       .eq("status", "pending")
+      .neq("email_type", "reminder_7d")
       .lte("send_at", new Date().toISOString())
       .order("send_at", { ascending: true })
       .limit(BATCH_SIZE);
@@ -128,6 +138,28 @@ serve(async (req) => {
 
     for (const item of due) {
       try {
+        // Anti-duplicação: se já existe envio bem-sucedido para
+        // este (registration_id, email_type) em email_send_log,
+        // marca este item como sent sem reenviar.
+        try {
+          const { data: prev } = await supabase
+            .from("email_send_log")
+            .select("id")
+            .eq("registration_id", item.registration_id)
+            .eq("email_type", item.email_type)
+            .eq("status", "sent")
+            .limit(1);
+          if (prev && prev.length > 0) {
+            await supabase.from("scheduled_emails")
+              .update({ status: "sent", sent_at: new Date().toISOString(), error: "dedupe_already_sent" })
+              .eq("id", item.id);
+            skipped++;
+            continue;
+          }
+        } catch (e) {
+          console.warn("[process-reminder-queue] dedupe check failed", item.id, e);
+        }
+
         // Load registration + event
         const { data: reg } = await supabase
           .from("registrations")
@@ -144,7 +176,31 @@ serve(async (req) => {
           continue;
         }
 
-        const recipientEmail = (reg.lead_email || "").trim().toLowerCase();
+        // Validação e normalização avançada
+        const prep = prepareEmailForSend(reg.lead_email);
+        if (!prep.ok) {
+          await supabase.from("scheduled_emails")
+            .update({ status: "failed", error: `invalid_email_address:${prep.reason}` })
+            .eq("id", item.id);
+          await supabase.from("email_send_log").insert({
+            registration_id: reg.id,
+            email_type: item.email_type,
+            recipient_email: prep.email || null,
+            status: "failed",
+            error_message: `invalid_email_address: ${prep.reason}`,
+          });
+          if (prep.email) {
+            await supabase.from("suppressed_emails").upsert({
+              email: prep.email,
+              reason: `invalid_format:${prep.reason}`,
+              source: "process-reminder-queue",
+            });
+            suppressedSet.add(prep.email);
+          }
+          skipped++;
+          continue;
+        }
+        const recipientEmail = prep.email;
         if (suppressedSet.has(recipientEmail)) {
           await supabase.from("scheduled_emails")
             .update({ status: "cancelled", error: "recipient_suppressed" })
@@ -179,7 +235,7 @@ serve(async (req) => {
           },
           body: JSON.stringify({
             from: FROM_ADDRESS,
-            to: [reg.lead_email],
+            to: [recipientEmail],
             reply_to: REPLY_TO_ADDRESS,
             subject: built.subject,
             html: built.html,
@@ -204,6 +260,7 @@ serve(async (req) => {
           const isInvalidRecipient =
             resp.status === 422 ||
             lower.includes("invalid `to`") || lower.includes("invalid email");
+          const isRateLimited = resp.status === 429;
 
           if (isDomainConfigError) {
             try {
@@ -211,6 +268,17 @@ serve(async (req) => {
                 id: 1,
                 cooldown_until: new Date(Date.now() + 30 * 60 * 1000).toISOString(),
                 last_provider_status: resp.status,
+                last_provider_error: respBody.slice(0, 500),
+                updated_at: new Date().toISOString(),
+              });
+            } catch (_) { /* noop */ }
+          }
+          if (isRateLimited) {
+            try {
+              await supabase.from("email_send_state").upsert({
+                id: 1,
+                cooldown_until: new Date(Date.now() + 60 * 1000).toISOString(),
+                last_provider_status: 429,
                 last_provider_error: respBody.slice(0, 500),
                 updated_at: new Date().toISOString(),
               });
@@ -228,7 +296,6 @@ serve(async (req) => {
           }
 
           const newAttempts = (item.attempts || 0) + 1;
-          // Em erro de domínio, marcamos como failed direto para não reenfileirar.
           const status = isDomainConfigError || isInvalidRecipient
             ? "failed"
             : (newAttempts >= 3 ? "failed" : "pending");
@@ -248,7 +315,8 @@ serve(async (req) => {
           });
 
           failed++;
-          if (isDomainConfigError) break; // aborta o ciclo
+          if (isDomainConfigError || isRateLimited) break; // aborta o ciclo
+          await sleep(PER_ITEM_DELAY_MS);
           continue;
         }
 
@@ -265,6 +333,7 @@ serve(async (req) => {
           provider_status: resp.status,
         });
         sent++;
+        await sleep(PER_ITEM_DELAY_MS);
       } catch (e) {
         console.error("[process-reminder-queue] item error", item.id, e);
         const newAttempts = (item.attempts || 0) + 1;
