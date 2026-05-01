@@ -13,7 +13,6 @@ import {
   EmailBucket,
   AuditRow,
 } from "@/hooks/useEventEmailAudit";
-import { exportToXlsx, exportToCsv } from "@/lib/attendeesFilters";
 
 interface Props {
   eventId: string;
@@ -89,24 +88,47 @@ export default function EventEmailAudit({ eventId, eventName }: Props) {
   };
 
   const handleExport = async (kind: "xlsx" | "csv") => {
-    const rows = filtered.map((r) => ({
-      lead_name: r.lead_name || "",
-      lead_email: r.lead_email || "",
-      lead_whatsapp: r.lead_whatsapp || "",
-      created_at: r.created_at,
-      data: {
-        Status: BUCKET_META[r.bucket].label,
-        "Última tentativa": r.last_attempt_at
-          ? format(new Date(r.last_attempt_at), "dd/MM/yyyy HH:mm", { locale: ptBR })
-          : "",
-        Motivo: r.last_error || "",
-      },
-    }));
+    const headers = ["Nome", "E-mail", "WhatsApp", "Status", "Motivo", "Última tentativa", "Inscrito em"];
+    const rows = filtered.map((r) => [
+      r.lead_name || "",
+      r.lead_email || "",
+      r.lead_whatsapp || "",
+      BUCKET_META[r.bucket].label,
+      r.last_error || "",
+      r.last_attempt_at ? format(new Date(r.last_attempt_at), "dd/MM/yyyy HH:mm", { locale: ptBR }) : "",
+      format(new Date(r.created_at), "dd/MM/yyyy HH:mm", { locale: ptBR }),
+    ]);
     const filename = `auditoria-emails_${eventName.toLowerCase().replace(/\s+/g, "-")}_${format(new Date(), "yyyy-MM-dd")}`;
-    const desc = [`Evento: ${eventName}`, `Filtro: ${FILTERS.find((f) => f.key === filter)?.label}`];
-    if (kind === "xlsx") await exportToXlsx(rows as any, filename, desc);
-    else exportToCsv(rows as any, filename);
+    if (kind === "csv") {
+      const escape = (v: any) => {
+        const s = String(v ?? "").replace(/^([=+\-@])/, "'$1");
+        return /[,"\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+      };
+      const csv = [headers, ...rows].map((r) => r.map(escape).join(",")).join("\n");
+      const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8" });
+      triggerDownload(blob, `${filename}.csv`);
+    } else {
+      const XLSX = await import("xlsx");
+      const wb = XLSX.utils.book_new();
+      const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
+      ws["!cols"] = headers.map((h, i) => ({
+        wch: Math.min(40, Math.max(12, Math.max(h.length, ...rows.slice(0, 200).map((r) => String(r[i] ?? "").length)) + 2)),
+      }));
+      XLSX.utils.book_append_sheet(wb, ws, "Auditoria");
+      const out = XLSX.write(wb, { bookType: "xlsx", type: "array" });
+      const blob = new Blob([out], {
+        type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      });
+      triggerDownload(blob, `${filename}.xlsx`);
+    }
   };
+
+  function triggerDownload(blob: Blob, name: string) {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url; a.download = name; a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
 
   if (isLoading) {
     return (
