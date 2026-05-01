@@ -103,6 +103,20 @@ serve(async (req) => {
           status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
+    } else if (explicitIds && explicitIds.length > 0) {
+      // Quando vêm IDs explícitos, valida que todos pertencem a eventos do usuário (ou admin).
+      if (!isAdmin) {
+        const { data: regsCheck } = await supabase
+          .from("registrations")
+          .select("id, event_id, events!inner(user_id)")
+          .in("id", explicitIds);
+        const ok = (regsCheck || []).every((r: any) => r.events?.user_id === userId);
+        if (!ok || (regsCheck || []).length === 0) {
+          return new Response(JSON.stringify({ error: "forbidden" }), {
+            status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+      }
     } else if (!isAdmin) {
       return new Response(JSON.stringify({ error: "forbidden" }), {
         status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" },
