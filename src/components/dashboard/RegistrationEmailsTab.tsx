@@ -90,9 +90,15 @@ export default function RegistrationEmailsTab({ registrationId, recipientEmail, 
 
   const rows = useMemo(() => unify(data?.log || [], data?.scheduled || []), [data]);
 
-  const hasConfirmationSent = (data?.log || []).some(
-    (l) => (l.email_type === "confirmation" || l.email_type === "registration_confirmation") && l.status === "sent",
+  const confirmationLogs = (data?.log || []).filter(
+    (l) => l.email_type === "confirmation" || l.email_type === "registration_confirmation",
   );
+  const lastConfirmation = confirmationLogs[0]; // já vem ordenado por created_at desc
+  const hasConfirmationSent = confirmationLogs.some((l) => l.status === "sent" || l.status === "delivered");
+  const lastFailed = !hasConfirmationSent && lastConfirmation && lastConfirmation.status === "failed"
+    ? lastConfirmation : null;
+  const isSuppressed = !!data?.suppressed;
+  const neverTried = !hasConfirmationSent && !lastFailed && !isSuppressed && confirmationLogs.length === 0;
 
   const handleResend = async () => {
     try {
@@ -148,10 +154,34 @@ export default function RegistrationEmailsTab({ registrationId, recipientEmail, 
         )}
       </div>
 
-      {!hasConfirmationSent && rows.length > 0 && (
+      {hasConfirmationSent && lastConfirmation && (
+        <div className="flex items-start gap-2 rounded-xl bg-success/10 text-success px-3 py-2 text-xs">
+          <Check className="w-4 h-4 mt-0.5 shrink-0" />
+          <span>
+            Confirmação registrada como enviada em{" "}
+            {format(new Date(lastConfirmation.created_at), "d MMM yyyy 'às' HH:mm", { locale: ptBR })}.
+          </span>
+        </div>
+      )}
+
+      {neverTried && rows.length > 0 && (
         <div className="flex items-start gap-2 rounded-xl bg-amber-500/10 text-amber-700 dark:text-amber-400 px-3 py-2 text-xs">
           <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" />
-          <span>Este inscrito ainda não tem confirmação registrada como enviada.</span>
+          <span>
+            <strong>Nenhuma tentativa de envio registrada.</strong> Esta inscrição é provavelmente
+            anterior à reativação do envio. Use “Enviar confirmação” para disparar agora.
+          </span>
+        </div>
+      )}
+
+      {lastFailed && (
+        <div className="flex items-start gap-2 rounded-xl bg-destructive/10 text-destructive px-3 py-2 text-xs">
+          <X className="w-4 h-4 mt-0.5 shrink-0" />
+          <span>
+            <strong>A última tentativa falhou.</strong>{" "}
+            {lastFailed.error_message ? `Motivo: ${lastFailed.error_message}. ` : ""}
+            Verifique se o e-mail está correto antes de reenviar.
+          </span>
         </div>
       )}
 
