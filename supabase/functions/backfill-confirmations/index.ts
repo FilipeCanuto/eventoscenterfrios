@@ -24,6 +24,7 @@ const DEDUPE_WINDOW_DAYS = 30;
 interface Payload {
   eventId?: string | null;
   dryRun?: boolean;
+  registrationIds?: string[] | null;
 }
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -79,6 +80,9 @@ serve(async (req) => {
     const body = (await req.json().catch(() => ({}))) as Payload;
     const targetEventId = body.eventId || null;
     const dryRun = body.dryRun === true;
+    const explicitIds = Array.isArray(body.registrationIds)
+      ? body.registrationIds.filter((x): x is string => typeof x === "string" && x.length > 0).slice(0, 500)
+      : null;
 
     const supabase = createClient(SUPABASE_URL, SERVICE_ROLE);
 
@@ -108,10 +112,14 @@ serve(async (req) => {
     let regsQuery = supabase
       .from("registrations")
       .select("id, lead_email, event_id, tracking, created_at, status")
-      .eq("status", "registered")
+      .neq("status", "cancelled")
       .order("created_at", { ascending: true })
       .limit(500);
-    if (targetEventId) regsQuery = regsQuery.eq("event_id", targetEventId);
+    if (explicitIds && explicitIds.length > 0) {
+      regsQuery = regsQuery.in("id", explicitIds);
+    } else if (targetEventId) {
+      regsQuery = regsQuery.eq("event_id", targetEventId);
+    }
 
     const { data: regs, error: regsErr } = await regsQuery;
     if (regsErr) throw regsErr;
