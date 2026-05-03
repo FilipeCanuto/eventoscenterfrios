@@ -196,6 +196,49 @@ export default function EventEmailAudit({ eventId, eventName }: Props) {
           <Stat label="Falharam" value={data.failed} tone="danger" />
           <Stat label="Suprimidos" value={data.suppressed} tone="muted" />
         </div>
+
+        {(data.never + data.failed) > 0 && (
+          <div className="rounded-xl bg-amber-500/10 border-0 p-4 flex flex-col sm:flex-row sm:items-center gap-3 justify-between">
+            <div className="text-sm">
+              <strong className="text-amber-700 dark:text-amber-400">{data.never + data.failed} inscritos pendentes</strong>
+              {" "}ainda não receberam a confirmação. Reenvie em massa agora (ignora bloqueios anti-duplicidade).
+            </div>
+            <Button
+              size="sm"
+              className="rounded-full h-9 bg-amber-600 hover:bg-amber-700 text-white shrink-0"
+              onClick={handleResendAllPending}
+              disabled={running}
+            >
+              {running ? <Loader2 className="w-3.5 h-3.5 mr-1 animate-spin" /> : <Send className="w-3.5 h-3.5 mr-1" />}
+              Reenviar todos pendentes
+            </Button>
+          </div>
+        )}
+
+        {(() => {
+          const invalids = data.rows.filter(
+            (r) =>
+              !r.lead_email ||
+              !/^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/.test(r.lead_email),
+          );
+          if (invalids.length === 0) return null;
+          return (
+            <div className="rounded-xl bg-destructive/10 border-0 p-4 space-y-2">
+              <div className="text-sm">
+                <strong className="text-destructive">{invalids.length} inscrições com e-mail inválido</strong>
+                {" "}— corrija manualmente na lista de participantes para que possam receber as comunicações.
+              </div>
+              <ul className="text-xs space-y-1">
+                {invalids.slice(0, 10).map((r) => (
+                  <li key={r.registration_id} className="flex justify-between gap-2">
+                    <span className="font-medium">{r.lead_name || "(sem nome)"}</span>
+                    <span className="text-muted-foreground truncate">{r.lead_email || "(vazio)"}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          );
+        })()}
       </div>
 
       <div className="bg-card rounded-xl p-4 sm:p-5 space-y-4">
