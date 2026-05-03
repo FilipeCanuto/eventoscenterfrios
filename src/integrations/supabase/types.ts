@@ -16,30 +16,48 @@ export type Database = {
     Tables: {
       email_send_log: {
         Row: {
+          bounce_type: string | null
+          bounced_at: string | null
+          complained_at: string | null
           created_at: string
+          delivered_at: string | null
           email_type: string
           error_message: string | null
           id: string
+          opened_at: string | null
+          provider_message_id: string | null
           provider_status: number | null
           recipient_email: string | null
           registration_id: string | null
           status: string
         }
         Insert: {
+          bounce_type?: string | null
+          bounced_at?: string | null
+          complained_at?: string | null
           created_at?: string
+          delivered_at?: string | null
           email_type: string
           error_message?: string | null
           id?: string
+          opened_at?: string | null
+          provider_message_id?: string | null
           provider_status?: number | null
           recipient_email?: string | null
           registration_id?: string | null
           status: string
         }
         Update: {
+          bounce_type?: string | null
+          bounced_at?: string | null
+          complained_at?: string | null
           created_at?: string
+          delivered_at?: string | null
           email_type?: string
           error_message?: string | null
           id?: string
+          opened_at?: string | null
+          provider_message_id?: string | null
           provider_status?: number | null
           recipient_email?: string | null
           registration_id?: string | null
