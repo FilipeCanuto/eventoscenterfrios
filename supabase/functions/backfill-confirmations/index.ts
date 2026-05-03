@@ -202,10 +202,12 @@ serve(async (req) => {
       const prep = prepareEmailForSend(r.lead_email);
       if (!prep.ok) { skipped_invalid++; return false; }
       if (sentSet.has(r.id)) return false;
-      if ((r.tracking as any)?.confirmation_email_sent_at) return false;
+      if (!force && (r.tracking as any)?.confirmation_email_sent_at) return false;
       if (suppressedSet.has(prep.email)) return false;
-      const evSet = recentlyEmailedByEvent.get(r.event_id);
-      if (evSet && evSet.has(prep.email)) { skipped_dedupe_event++; return false; }
+      if (!force) {
+        const evSet = recentlyEmailedByEvent.get(r.event_id);
+        if (evSet && evSet.has(prep.email)) { skipped_dedupe_event++; return false; }
+      }
       return true;
     });
 
