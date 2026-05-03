@@ -110,9 +110,12 @@ export function useEventEmailAudit(eventId: string | null | undefined) {
   });
 }
 
-export async function resendForRegistrations(registrationIds: string[]) {
+export async function resendForRegistrations(
+  registrationIds: string[],
+  force: boolean = false,
+) {
   const { data, error } = await supabase.functions.invoke("backfill-confirmations", {
-    body: { registrationIds },
+    body: { registrationIds, force },
   });
   if (error) throw error;
   return data as {
