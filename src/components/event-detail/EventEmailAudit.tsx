@@ -246,7 +246,7 @@ export default function EventEmailAudit({ eventId, eventName }: Props) {
               </div>
               <Button
                 size="sm" className="rounded-full h-9"
-                onClick={handleResend}
+                onClick={() => handleResend(false)}
                 disabled={running || selected.size === 0}
               >
                 {running ? <Loader2 className="w-3.5 h-3.5 mr-1 animate-spin" /> : <Send className="w-3.5 h-3.5 mr-1" />}
