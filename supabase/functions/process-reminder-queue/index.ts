@@ -320,6 +320,12 @@ serve(async (req) => {
           continue;
         }
 
+        let resendId: string | null = null;
+        try {
+          const parsed = JSON.parse(respBody);
+          resendId = (parsed?.id as string | undefined) ?? null;
+        } catch (_) { /* respBody not JSON */ }
+
         await supabase.from("scheduled_emails").update({
           status: "sent",
           sent_at: new Date().toISOString(),
@@ -331,6 +337,7 @@ serve(async (req) => {
           recipient_email: recipientEmail,
           status: "sent",
           provider_status: resp.status,
+          provider_message_id: resendId,
         });
         sent++;
         await sleep(PER_ITEM_DELAY_MS);
