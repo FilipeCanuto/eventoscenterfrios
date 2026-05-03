@@ -62,7 +62,7 @@ export default function EventEmailAudit({ eventId, eventName }: Props) {
     else setSelected(new Set(filtered.map((r) => r.registration_id)));
   };
 
-  const handleResend = async () => {
+  const handleResend = async (force: boolean = false) => {
     const ids = Array.from(selected).filter((id) => {
       const row = data?.rows.find((r) => r.registration_id === id);
       return row && row.bucket !== "delivered" && row.bucket !== "suppressed";
@@ -73,7 +73,7 @@ export default function EventEmailAudit({ eventId, eventName }: Props) {
     }
     setRunning(true);
     try {
-      const res = await resendForRegistrations(ids);
+      const res = await resendForRegistrations(ids, force);
       toast.success(
         `Reenvio concluído: ${res.sent} enviados, ${res.failed} falhas, ${res.skipped_delivered + res.skipped_suppressed + res.skipped_invalid} ignorados.`,
       );
@@ -82,6 +82,33 @@ export default function EventEmailAudit({ eventId, eventName }: Props) {
       qc.invalidateQueries({ queryKey: ["registration-emails"] });
     } catch (e: any) {
       toast.error(e?.message || "Falha ao reenviar.");
+    } finally {
+      setRunning(false);
+    }
+  };
+
+  const handleResendAllPending = async () => {
+    if (!data) return;
+    const ids = data.rows
+      .filter((r) => r.bucket === "never" || r.bucket === "failed")
+      .map((r) => r.registration_id);
+    if (ids.length === 0) {
+      toast.info("Nenhum pendente para reenviar.");
+      return;
+    }
+    if (!window.confirm(`Reenviar confirmação para ${ids.length} inscritos pendentes (forçando, ignora bloqueios de duplicidade)?`)) {
+      return;
+    }
+    setRunning(true);
+    try {
+      const res = await resendForRegistrations(ids, true);
+      toast.success(
+        `Reenvio em massa: ${res.sent} enviados, ${res.failed} falhas, ${res.skipped_delivered + res.skipped_suppressed + res.skipped_invalid} ignorados.`,
+      );
+      await refetch();
+      qc.invalidateQueries({ queryKey: ["registration-emails"] });
+    } catch (e: any) {
+      toast.error(e?.message || "Falha no reenvio em massa.");
     } finally {
       setRunning(false);
     }
