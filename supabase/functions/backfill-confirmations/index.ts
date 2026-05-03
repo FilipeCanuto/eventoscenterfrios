@@ -25,6 +25,7 @@ interface Payload {
   eventId?: string | null;
   dryRun?: boolean;
   registrationIds?: string[] | null;
+  force?: boolean;
 }
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -80,6 +81,7 @@ serve(async (req) => {
     const body = (await req.json().catch(() => ({}))) as Payload;
     const targetEventId = body.eventId || null;
     const dryRun = body.dryRun === true;
+    const force = body.force === true;
     const explicitIds = Array.isArray(body.registrationIds)
       ? body.registrationIds.filter((x): x is string => typeof x === "string" && x.length > 0).slice(0, 500)
       : null;
@@ -200,10 +202,12 @@ serve(async (req) => {
       const prep = prepareEmailForSend(r.lead_email);
       if (!prep.ok) { skipped_invalid++; return false; }
       if (sentSet.has(r.id)) return false;
-      if ((r.tracking as any)?.confirmation_email_sent_at) return false;
+      if (!force && (r.tracking as any)?.confirmation_email_sent_at) return false;
       if (suppressedSet.has(prep.email)) return false;
-      const evSet = recentlyEmailedByEvent.get(r.event_id);
-      if (evSet && evSet.has(prep.email)) { skipped_dedupe_event++; return false; }
+      if (!force) {
+        const evSet = recentlyEmailedByEvent.get(r.event_id);
+        if (evSet && evSet.has(prep.email)) { skipped_dedupe_event++; return false; }
+      }
       return true;
     });
 
@@ -269,7 +273,7 @@ serve(async (req) => {
               "Content-Type": "application/json",
               Authorization: `Bearer ${SERVICE_ROLE}`,
             },
-            body: JSON.stringify({ registrationId: r.id }),
+            body: JSON.stringify({ registrationId: r.id, force }),
           });
           const json = await resp.json().catch(() => ({}));
           if (resp.ok && (json as any)?.ok) sent++;
