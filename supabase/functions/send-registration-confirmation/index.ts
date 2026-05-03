@@ -395,12 +395,19 @@ serve(async (req) => {
       })
       .eq("id", body.registrationId);
 
+    let resendId: string | null = null;
+    try {
+      const parsed = JSON.parse(respBody);
+      resendId = (parsed?.id as string | undefined) ?? null;
+    } catch (_) { /* respBody not JSON */ }
+
     await logAttempt(supabase, {
       registration_id: reg.id,
       email_type: "confirmation",
       recipient_email: recipientEmail,
       status: "sent",
       provider_status: resp.status,
+      provider_message_id: resendId,
     });
 
     console.log("[send-registration-confirmation] Sent", recipientEmail);
