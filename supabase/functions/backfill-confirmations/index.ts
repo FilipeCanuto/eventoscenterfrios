@@ -273,7 +273,7 @@ serve(async (req) => {
               "Content-Type": "application/json",
               Authorization: `Bearer ${SERVICE_ROLE}`,
             },
-            body: JSON.stringify({ registrationId: r.id }),
+            body: JSON.stringify({ registrationId: r.id, force }),
           });
           const json = await resp.json().catch(() => ({}));
           if (resp.ok && (json as any)?.ok) sent++;
