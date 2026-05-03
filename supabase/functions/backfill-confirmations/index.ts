@@ -81,6 +81,7 @@ serve(async (req) => {
     const body = (await req.json().catch(() => ({}))) as Payload;
     const targetEventId = body.eventId || null;
     const dryRun = body.dryRun === true;
+    const force = body.force === true;
     const explicitIds = Array.isArray(body.registrationIds)
       ? body.registrationIds.filter((x): x is string => typeof x === "string" && x.length > 0).slice(0, 500)
       : null;
