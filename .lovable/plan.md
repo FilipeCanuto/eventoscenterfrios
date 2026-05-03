@@ -1,92 +1,113 @@
 
-## Fase 1 — Painel de Auditoria de E-mails (entregar agora)
+# Auditoria — Circuito Experience: Centerfrios & Skymsen
 
-A pergunta "todos os inscritos receberam o e-mail?" hoje só pode ser respondida abrindo cada inscrito um por um. Vamos resolver isso com uma central por evento, e ao mesmo tempo deixar a mensagem confusa do card individual mais explicativa.
-
-### 1. Mensagem clara no card do inscrito
-
-Hoje aparece um único aviso amarelo genérico ("Este inscrito ainda não tem confirmação registrada como enviada.") em três situações muito diferentes. Vamos diferenciar:
-
-- **Nunca tentado** (caixa amarela) — "Nenhuma tentativa de envio registrada. Provavelmente esta inscrição é anterior à reativação do envio. Use 'Enviar confirmação' para disparar agora."
-- **Falhou na entrega** (caixa vermelha) — "A última tentativa falhou: [motivo]. Verifique se o e-mail está correto antes de reenviar." Mostra o erro real do log (bounce, timeout, formato inválido).
-- **E-mail suprimido** (caixa vermelha, já existe) — mantida como está.
-- **Entregue com sucesso** (caixa verde, nova) — "Confirmação entregue em [data]." Hoje não mostramos sucesso, só ausência.
-
-A lógica de classificação já está disponível no `email_send_log` + `suppressed_emails` que o hook `useRegistrationEmails` carrega.
-
-### 2. Nova aba "E-mails" no dashboard do evento
-
-Dentro de `EventDetail.tsx`, ao lado das abas atuais, adicionar uma aba **Auditoria de e-mails** que mostra para o evento selecionado:
-
-```text
-┌─────────────────────────────────────────────────────────┐
-│ Auditoria de envios — Evento: Workshop Center Frios     │
-├─────────────────────────────────────────────────────────┤
-│ [142] Inscritos    [128] Confirmados    [9] Pendentes   │
-│ [3] Falharam       [2] Suprimidos       91% entregue    │
-├─────────────────────────────────────────────────────────┤
-│ Filtro: [Pendentes ▾] [Falharam] [Suprimidos] [Todos]  │
-├─────────────────────────────────────────────────────────┤
-│ ☐ João Silva     joao@gmail.com    Nunca tentado    [↗]│
-│ ☐ Maria Costa    maria@hotmial.cm  Bounce: invalid  [↗]│
-│ ☐ Pedro Lima     pedro@empresa.br  Suprimido        [↗]│
-│ ...                                                     │
-├─────────────────────────────────────────────────────────┤
-│ [Selecionar todos]  [Reenviar selecionados (9)]        │
-│ [Exportar lista pendentes em planilha]                  │
-└─────────────────────────────────────────────────────────┘
-```
-
-**Cálculo dos buckets** (uma única query agregada, server-side):
-- **Confirmado** = existe `email_send_log` com `email_type IN ('confirmation','registration_confirmation')` e `status IN ('sent','delivered')`.
-- **Falhou** = última linha de log de confirmação tem `status = 'failed'` e e-mail não está suprimido.
-- **Suprimido** = e-mail está em `suppressed_emails`.
-- **Nunca tentado** = nenhum log de confirmação para a inscrição e e-mail não está suprimido.
-
-**Ações em massa** (com mesmo throttling do backfill atual: 5 por lote, 400ms entre itens, 2s entre lotes):
-- Reenviar selecionados → reaproveita `backfill-confirmations` aceitando uma lista de `registrationIds`.
-- Exportar pendentes → planilha .xlsx via `ExportMenu` reutilizando `attendeesFilters.ts`, com colunas: nome, e-mail, WhatsApp, motivo, data da inscrição.
-
-### 3. Ajuste no `backfill-confirmations`
-
-Aceitar payload opcional `registrationIds: string[]` para reprocessar apenas IDs específicos (em vez de varrer o evento todo). Mantém validação de admin/dono e a verificação contra a Resend API antes de reenviar (anti-duplicação que já existe).
-
-### 4. Visão global em `/dashboard/attendees`
-
-Na página global de participantes, adicionar um chip de status de e-mail ao lado de cada linha (✓ entregue / ⏳ pendente / ⚠ falhou / ⛔ suprimido) e um filtro "Status do e-mail" no `AttendeesFilters`.
+Evento ao vivo, 207 inscrições, começa em **~36 horas** (05/05 às 14h BRT). Investiguei banco de dados, edge functions, agendamentos e código. Abaixo, o que encontrei e o que precisa ser feito **antes do evento**.
 
 ---
 
-## Fase 2 — WhatsApp (planejada, não implementada agora)
+## Achados críticos (precisam ser corrigidos hoje)
 
-Após validar a Fase 1, integramos **WhatsApp Cloud API (Meta oficial)** para mandar mensagem aos inscritos cujo e-mail falhou ou não foi tentado. O fluxo será:
+### C1 — 70% das inscrições (146 de 207) NÃO têm e-mail de confirmação entregue
+O log mostra apenas **64 envios `sent`** e **2.390 envios `skipped` com motivo `dedupe_recipient_event`**. Esse "dedupe" foi acionado em looping pelo backfill, mascarando a falha real: muitos inscritos simplesmente nunca tiveram a confirmação processada com sucesso na primeira tentativa.
 
-1. Botão "Enviar correção via WhatsApp" no card do inscrito e em massa no painel de auditoria.
-2. Mensagem com **template aprovado pela Meta** (categoria `UTILITY`) contendo um **link único tokenizado** tipo `meuevento.com/corrigir-email/{token}`.
-3. Página `/corrigir-email/{token}` (pública, sem login) onde o inscrito digita o e-mail correto. O token tem validade de 7 dias e uso único.
-4. Ao confirmar, atualiza `registrations.lead_email`, registra a alteração em log de auditoria e dispara `send-registration-confirmation` automaticamente.
+### C2 — 15 inscrições recentes (após 30/04) estão SEM lembrete agendado
+A função `schedule_event_reminders` só é chamada **dentro do `send-registration-confirmation`**, *depois* dos blocos de dedupe. Quando a confirmação é abortada por dedupe (segunda inscrição com o mesmo e-mail) ou por e-mail inválido, **o agendamento dos lembretes nunca acontece**. Resultado: essas 15 pessoas não receberão lembrete 1 dia antes nem 2 horas antes.
 
-**Pré-requisitos que precisaremos do usuário** (para a Fase 2, não agora):
-- Conta WhatsApp Business verificada na Meta
-- Phone Number ID + WABA ID
-- Token permanente de System User
-- Aprovação do template de mensagem (24-48h pela Meta)
+Inscritos afetados incluem: josesalmeida@hotmail.com, ronatasilvajr.rj@gmail.com, alexaleixo2008@gmail.com, dygo4p@gmail.com, alexandreflp2@hotmail.com, fabricio_fba@hotmail.com, pousadamahonmar70@gmail.com, e mais 8.
 
-A Fase 2 fica documentada e pronta para ser destravada quando você tiver esses itens.
+### C3 — 29 e-mails duplicados geram inscrições "fantasma" sem comunicação
+58 inscrições compartilham e-mail com outra (mesma pessoa se inscreveu 2x, ou cadastrou colega usando o próprio e-mail). A regra atual envia confirmação só para a primeira e marca as demais como `skipped`. As segundas inscrições aparecem na lista de participantes mas **não recebem nenhum e-mail** — nem confirmação, nem lembrete.
+
+### C4 — 3 inscrições com e-mail inválido travado
+- `d**********@gmail.com` (Diego Cassiano) — e-mail mascarado, claramente erro de cadastro
+- `su~carmo@hotmail.com` (Suzana) — caractere `~` inválido
+- `let'spizzarulliam@gmail.com` (Diego Rulliam) — apóstrofo inválido
+
+Estas 3 pessoas estão inscritas mas o sistema não consegue enviá-las. Ninguém foi notificado para corrigir.
+
+---
+
+## Achados de média gravidade
+
+### M1 — 432 lembretes enfileirados, mas só 192 por tipo (1d e 2h)
+Diferença de 15 inscrições entre o total ativo (207) e os lembretes agendados (192) — efeito colateral do C2.
+
+### M2 — 2 inscritos em lista de supressão (suppressed_emails)
+Bouncearam ou marcaram como spam em campanhas anteriores. Não receberão nada e não há aviso visível ao organizador.
+
+### M3 — 48 lembretes `reminder_7d` foram enviados (status `sent`)
+O sistema atual está marcado para usar só `reminder_1d` e `reminder_2h`, mas 48 reminders de 7 dias antes saíram. Resíduo de configuração antiga — não é bug ativo, mas polui métricas.
+
+### M4 — Função RPC `register_for_event` não dispara `schedule_event_reminders`
+O agendamento depende exclusivamente do edge function de confirmação rodar até o fim. Se o edge function falhar (cold start, timeout, indisponibilidade Resend), a inscrição grava mas nunca recebe lembretes. Acoplamento frágil.
+
+---
+
+## Achados de baixa gravidade
+
+### B1 — Janela de dedupe de 30 dias é fixa em código (`DEDUPE_WINDOW_DAYS`)
+Não está exposta no painel; difícil de ajustar sem deploy.
+
+### B2 — Validação de e-mail acontece só no envio, não na inscrição
+O formulário público aceita `let'spizzarulliam@gmail.com` sem reclamar; o erro só aparece horas depois no log.
+
+### B3 — Logs `skipped` (2.390 entradas) inflam a tabela `email_send_log`
+Ruído nas métricas e no painel de auditoria.
+
+### B4 — Sem alerta proativo para o organizador
+Nenhuma notificação no dashboard avisa "X inscritos não receberão nenhum e-mail". Visibilidade depende de abrir aba a aba.
+
+---
+
+## Plano de correção (ordem de execução)
+
+### Fase 1 — Hotfix imediato (antes do evento, hoje)
+
+1. **Agendar lembretes para todas as 207 inscrições ativas** independentemente do status de confirmação. Migração SQL que executa `schedule_event_reminders(id)` para cada inscrição do evento que ainda não tem `reminder_1d` agendado. Resolve C2 e M1.
+
+2. **Desacoplar agendamento de lembretes do envio de confirmação.** Adicionar trigger no Postgres em `registrations AFTER INSERT` que chama `schedule_event_reminders` automaticamente. Garante que toda inscrição futura tenha lembretes, mesmo que o edge function falhe. Resolve M4.
+
+3. **Reenviar confirmação para os 146 inscritos sem entrega.** Botão "Reenviar para todos os pendentes" no painel de auditoria do evento, ignorando o dedupe `recipient_event` para envios manualmente solicitados pelo organizador. Resolve C1.
+
+4. **Mostrar lista de inscrições com e-mail inválido + ação rápida para corrigir.** Bloco destacado no topo da aba "E-mails" do evento listando os 3 e-mails travados, com input inline para o organizador editar e disparar reenvio. Resolve C4.
+
+### Fase 2 — Tratamento de duplicatas (esta semana)
+
+5. **Tela de "Inscrições duplicadas"** mostrando os 29 e-mails compartilhados por 2 inscrições. Para cada par, organizador escolhe: cancelar a duplicata, manter as duas e enviar e-mails separados (override do dedupe), ou marcar como acompanhante (sem comunicação). Resolve C3.
+
+6. **Validação de e-mail no formulário público** (regex no cliente + validação RPC) impedindo apóstrofo, til e formatos quebrados antes da gravação. Previne novos casos como C4.
+
+### Fase 3 — Higiene e visibilidade (próxima sprint)
+
+7. **Painel de saúde do evento** no topo do dashboard de cada evento: card vermelho quando há inscritos sem confirmação ou sem lembrete agendado, com link direto para a aba de ação. Resolve B4.
+
+8. **Limpeza dos logs `skipped`**: deixar de gravar log quando o motivo é `dedupe_recipient_event` (já é uma decisão silenciosa) e marcar os 2.390 existentes como `archived`. Resolve B3.
+
+9. **Cancelar e arquivar os `reminder_7d`** órfãos. Resolve M3.
+
+10. **Aviso visível para inscritos em lista de supressão**: badge "E-mail suprimido" na linha do participante com tooltip explicando o motivo. Resolve M2.
 
 ---
 
 ## Detalhes técnicos
 
-**Arquivos a criar/editar (Fase 1):**
-- `src/components/dashboard/RegistrationEmailsTab.tsx` — substituir aviso único por classificação em 4 estados.
-- `src/components/event-detail/EventEmailAudit.tsx` (novo) — painel de auditoria do evento.
-- `src/hooks/useEventEmailAudit.ts` (novo) — query agregada + lista paginada com filtro por bucket.
-- `src/pages/dashboard/EventDetail.tsx` — adicionar nova aba.
-- `src/pages/dashboard/Attendees.tsx` + `src/components/dashboard/AttendeesFilters.tsx` — coluna e filtro "Status do e-mail".
-- `supabase/functions/backfill-confirmations/index.ts` — aceitar `registrationIds: string[]`.
-- Migração: índice em `email_send_log (registration_id, email_type, status)` para acelerar a query agregada.
+**Arquivos e objetos envolvidos:**
+- `supabase/migrations/<nova>.sql` — backfill de `schedule_event_reminders`, trigger `AFTER INSERT` em `registrations`, cancelamento de `reminder_7d` pendentes, arquivamento de logs `skipped`.
+- `supabase/functions/send-registration-confirmation/index.ts` — mover chamada de `schedule_event_reminders` para **antes** dos blocos de dedupe; aceitar flag `skipDedupe` quando vier de retry manual.
+- `supabase/functions/backfill-confirmations/index.ts` — adicionar modo `force=true` por `registrationIds` ignorando dedupe `recipient_event`.
+- `src/components/event-detail/EventEmailAudit.tsx` — bloco de "E-mails inválidos" + botão "Reenviar todos os pendentes (forçar)".
+- `src/components/event-detail/EventDuplicates.tsx` (novo) — tela de duplicatas.
+- `src/pages/Register.tsx` + `register_for_event` RPC — validação regex de e-mail.
+- `src/components/event-detail/EventHealthBanner.tsx` (novo) — banner de saúde no topo do dashboard.
 
-**Não vamos mexer em:** templates de e-mail, lógica de throttling, validação de e-mails — tudo isso já está pronto e funcionando.
+**Por que o trigger `AFTER INSERT` é seguro:** `schedule_event_reminders` já existe como `SECURITY DEFINER`, é idempotente (UNIQUE em `registration_id, email_type` + `ON CONFLICT DO UPDATE`), e roda em ms. Não bloqueia a inscrição.
 
-**Posso prosseguir com a Fase 1?**
+**Risco zero para os 64 já confirmados:** todas as ações são aditivas (agendar, reenviar com `force`); não tocam em registros já entregues.
+
+---
+
+## Resumo executivo
+
+Estado atual a 36h do evento: **70% dos inscritos sem confirmação, 7% sem lembretes agendados, 14% com inscrição duplicada sem comunicação, 3 inscrições travadas por e-mail inválido**. A Fase 1 corrige os quatro pontos críticos antes do evento começar. As Fases 2 e 3 evitam que o problema se repita nos próximos eventos.
+
+**Posso prosseguir com a Fase 1 (hotfix imediato) agora?**
