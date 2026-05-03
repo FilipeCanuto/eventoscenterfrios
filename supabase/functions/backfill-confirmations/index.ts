@@ -25,6 +25,7 @@ interface Payload {
   eventId?: string | null;
   dryRun?: boolean;
   registrationIds?: string[] | null;
+  force?: boolean;
 }
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
