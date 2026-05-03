@@ -33,6 +33,7 @@ async function logAttempt(
     status: string;
     provider_status?: number | null;
     error_message?: string | null;
+    provider_message_id?: string | null;
   },
 ) {
   try {
