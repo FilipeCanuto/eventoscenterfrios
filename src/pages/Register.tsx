@@ -702,6 +702,8 @@ const Register = () => {
   const formStartedRef = useRef(false);
   const submittingRef = useRef(false);
   const lastTrackedRef = useRef<{ email?: string; name?: string; whatsapp?: string }>({});
+  const [warnings, setWarnings] = useState<FieldWarnings>({});
+  const checkedDomainsRef = useRef<Set<string>>(new Set());
 
   useEffect(() => {
     utmsRef.current = captureUtms(searchParams);
