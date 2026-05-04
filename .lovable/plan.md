@@ -1,76 +1,84 @@
-## Objetivo
+## Problema
 
-Trazer a verdade do Resend (entregue, bounce, complaint, opened) para dentro do nosso `email_send_log`, para que a auditoria deixe de depender de "o Resend aceitou a requisição" e passe a refletir "o e-mail realmente chegou na caixa do inscrito".
+Hoje a função `register_for_event` bloqueia o 3º cadastro com o mesmo e-mail no mesmo evento (limite de 2). Famílias, casais e pessoas sem e-mail próprio ficam de fora. Ao mesmo tempo, precisamos:
+- Não inflar bounces no Resend (1 e-mail = N envios duplicados é ruim).
+- Manter rastreabilidade (saber quem é quem nos relatórios e check-in).
+- Reduzir typos no momento do cadastro (já temos correção de typo, mas não checamos se o domínio realmente recebe e-mail).
 
-## Por que isso é necessário
+## Solução proposta
 
-Hoje o `email_send_log.status = 'sent'` significa apenas que o Resend respondeu HTTP 200 — não significa entrega. Bounces silenciosos ficam invisíveis. Sem isso, qualquer "reenvio para quem não recebeu" corre o risco de duplicar e-mails para quem já recebeu (e poupar quem teve bounce).
+### 1. Identidade primária = WhatsApp, e-mail = canal de contato
 
-## Mudanças
+Mudamos a chave de unicidade da inscrição. Em vez de "máx. 2 por e-mail", passa a ser:
 
-### 1. Banco de dados (migration)
+- **1 inscrição por (evento, WhatsApp)** — WhatsApp vira o identificador único da pessoa.
+- **E-mail pode se repetir livremente** dentro do evento.
+- Se WhatsApp não foi preenchido no formulário daquele evento, mantemos o limite atual de 2 por e-mail como fallback.
 
-- Adicionar colunas em `email_send_log`:
-  - `provider_message_id text` — ID retornado pelo Resend ao enviar (`Email.id`)
-  - `delivered_at timestamptz` — preenchido pelo evento `email.delivered`
-  - `bounced_at timestamptz` + `bounce_type text` (hard/soft) — pelo evento `email.bounced`
-  - `complained_at timestamptz` — pelo evento `email.complained`
-  - `opened_at timestamptz` (opcional) — pelo evento `email.opened`
-- Índice em `provider_message_id` para o webhook fazer UPDATE rápido.
-- Política de UPDATE restrita ao service role (webhook).
+Isso resolve o caso real (esposa usando e-mail do marido, filho usando e-mail dos pais) sem perder a capacidade de detectar duplicatas reais (mesma pessoa clicando 2x).
 
-### 2. Salvar o `message_id` do Resend no envio
+### 2. Apenas 1 e-mail de confirmação por endereço por evento
 
-- Atualizar `send-registration-confirmation` e `backfill-confirmations` para capturar `data.id` da resposta do Resend e gravar em `provider_message_id` ao inserir/atualizar a linha do log.
-- Mesmo tratamento para `send-event-reminders` (lembretes 1d/2h).
+Para não machucar a reputação no Resend quando 4 pessoas da mesma família usam o mesmo e-mail:
 
-### 3. Nova Edge Function `resend-webhook` (pública, sem JWT)
+- A 1ª inscrição com aquele e-mail naquele evento → envia confirmação normal (com QR code dela).
+- Da 2ª em diante com o mesmo e-mail no mesmo evento → envia **um único e-mail consolidado** listando todos os inscritos vinculados àquele endereço, com o QR code de cada um. Se o e-mail consolidado já foi enviado nas últimas 10 min, apenas atualiza-se o registro como "agrupado" sem reenviar.
+- Cada inscrito ainda recebe o WhatsApp de confirmação individual (se tivermos integração) e tem seu próprio QR code acessível pelo link público.
 
-- Endpoint `POST /resend-webhook`.
-- Valida assinatura do Resend usando o segredo `RESEND_WEBHOOK_SECRET` (header `svix-signature` — Resend usa Svix).
-- Trata os eventos: `email.delivered`, `email.bounced`, `email.complained`, `email.delivery_delayed`, `email.opened` (opcional).
-- Faz `UPDATE email_send_log SET delivered_at=…/bounced_at=…/… WHERE provider_message_id = data.email_id`.
-- Em `email.bounced` (hard) e `email.complained`: também insere em `suppressed_emails` para bloquear futuros envios automáticos.
-- Logs estruturados para depuração.
+Resultado: o Resend vê 1 envio por endereço/evento em vez de 4, mas todos os participantes ficam com confirmação válida.
 
-### 4. Atualizações no painel de auditoria (`EventEmailAudit.tsx` + `useEventEmailAudit.ts`)
+### 3. Validação MX em tempo real no formulário
 
-- Recategorizar buckets usando os novos campos:
-  - **Entregue** = `delivered_at IS NOT NULL`
-  - **Bounce** = `bounced_at IS NOT NULL` (separar hard/soft)
-  - **Reclamação** = `complained_at IS NOT NULL`
-  - **Aceito (sem confirmação)** = `status='sent'` há > 30 min sem `delivered_at` nem `bounced_at`
-  - **Falhou** = `status IN ('failed','dlq')`
-  - **Nunca tentado** = sem log
-- Banner informativo enquanto `provider_message_id` for nulo em registros antigos: "Histórico anterior ao webhook — status real desconhecido. Use o painel do Resend para validar."
-- Reenvio em massa passa a oferecer o filtro "Apenas bounce + nunca entregue + nunca tentado" (excluindo `delivered`).
+Hoje validamos formato + corrigimos typos conhecidos. Vamos adicionar uma checagem extra **no blur do campo de e-mail**:
 
-### 5. Onboarding (instruções para você no chat após deploy)
+- Nova edge function `validate-email-domain` (pública, rate-limited por IP) que recebe um e-mail e faz lookup MX do domínio via DNS-over-HTTPS (Cloudflare 1.1.1.1).
+- Cache em memória de 24h por domínio para evitar chamadas repetidas.
+- Resposta: `{ valid: true }` ou `{ valid: false, reason: "no_mx", suggestion?: "gmail.com" }`.
+- No frontend, ao sair do campo: se o domínio não tem MX, mostra aviso amigável **não-bloqueante** ("Não encontramos o servidor de e-mail para `dominio.xyz`. Confira se está correto.") com botão "Usar mesmo assim". Não bloqueia o envio — só alerta.
+- Mantém toda a validação de formato/typo atual como primeira camada (instantânea, sem chamada de rede).
 
-1. Eu te dou a URL da função: `https://ahwecyjzzczcwunptxae.supabase.co/functions/v1/resend-webhook`.
-2. Você abre Resend → **Webhooks** → **Add Endpoint**, cola a URL e marca os eventos: `email.delivered`, `email.bounced`, `email.complained`, `email.delivery_delayed`.
-3. Resend gera um **Signing Secret**. Você me passa esse secret.
-4. Eu salvo como `RESEND_WEBHOOK_SECRET` no backend e a partir daí tudo é automático.
+### 4. UX no formulário
 
-### 6. Backfill (limitação honesta)
+- Quando o usuário digita um WhatsApp já cadastrado naquele evento, mostramos mensagem clara: "Este WhatsApp já está inscrito. Se for outra pessoa, use um número diferente."
+- Quando digita um e-mail já usado naquele evento, mostramos um aviso informativo (não bloqueante): "Este e-mail já está vinculado a outra inscrição neste evento. Tudo bem se for família/grupo — o link de confirmação será enviado uma vez só, com todos os QR codes."
 
-- Resend só envia webhook para eventos **novos** a partir do momento da configuração. Para os 62 e-mails históricos do bucket `A_sent`, **não há como recuperar o status retroativo via webhook** — só via export do CSV do painel do Resend ou consulta manual.
-- Vou adicionar um botão no painel "Importar CSV do Resend" que aceita o export deles e atualiza `delivered_at`/`bounced_at` por correspondência de e-mail + janela de tempo. Isso resolve o passivo histórico do Circuito Experience.
+## Detalhes técnicos
 
-## Ordem de execução
+**Migration (schema):**
+- Adicionar índice único parcial em `registrations(event_id, lead_whatsapp)` onde `lead_whatsapp IS NOT NULL AND status != 'cancelled'`.
+- Reescrever `register_for_event` para:
+  - Validar duplicata por WhatsApp quando presente (1 max).
+  - Manter validação por e-mail apenas como fallback quando WhatsApp ausente, e elevar limite de 2 → configurável (default 5 por e-mail/evento).
 
-1. Migration (colunas novas).
-2. Edge Function `resend-webhook` + alteração nas funções de envio para salvar `provider_message_id`.
-3. Eu te passo a URL e peço o `RESEND_WEBHOOK_SECRET`.
-4. Atualizo o painel de auditoria com os novos buckets.
-5. Adiciono o importador de CSV do Resend para o histórico.
-6. Você roda o reenvio cirúrgico para "bounce + nunca entregue + nunca tentado", excluindo entregues.
+**Edge function nova: `validate-email-domain`**
+- Input: `{ email: string }`. CORS aberto, sem JWT.
+- Rate limit: 30 req/min por IP usando Map em memória.
+- Faz `fetch('https://cloudflare-dns.com/dns-query?name=DOMAIN&type=MX', { headers: { accept: 'application/dns-json' }})`.
+- Cache por domínio em memória da função (TTL 24h).
+- Retorna `valid` baseado em ter ao menos 1 registro MX.
 
-## Não vou fazer ainda
+**Edge function modificada: `send-registration-confirmation`**
+- Antes de enviar, contar quantas inscrições daquele evento usam o mesmo `lead_email`.
+- Se for a 1ª → envio normal.
+- Se for 2ª+ e já existe envio recente (< 10 min) com `template_name = 'group_confirmation'` para esse e-mail/evento → marca log como `grouped` e não chama Resend.
+- Caso contrário → renderiza template "consolidado" listando todos os participantes vinculados ao e-mail e envia 1 mensagem.
 
-- Nenhum reenvio automático antes do webhook estar ativo e validado com 1–2 e-mails de teste.
-- Nenhum disparo de WhatsApp (continua sendo Fase 2 separada).
+**Frontend (`src/pages/Register.tsx`):**
+- Adicionar `onBlur` no campo de e-mail chamando `validate-email-domain` com debounce.
+- Estado `emailDomainWarning` exibido como `<Alert>` informativo abaixo do campo, com botão "Usar mesmo assim" que silencia o aviso.
+- Ao detectar e-mail já existente no evento (consulta leve via RPC pública nova `count_registrations_by_email(event_id, email)`), mostrar nota informativa de "envio agrupado".
+- Ao detectar WhatsApp já existente no evento, bloquear submit com mensagem clara.
 
-## Posso prosseguir?
+**Compatibilidade:**
+- Inscrições existentes não são afetadas (índice é parcial, e a função só valida em novos inserts).
+- Logs históricos no `email_send_log` continuam válidos.
 
-Ao aprovar, eu executo passos 1, 2 e te entrego a URL + peço o secret. O resto segue após você colar o secret.
+## Resumo do que muda para o usuário final
+
+1. Pode inscrever toda a família com o mesmo e-mail, contanto que cada um tenha seu WhatsApp.
+2. Recebe um único e-mail de confirmação consolidado (com todos os QR codes) em vez de 4 mensagens iguais.
+3. Vê aviso amigável quando digita um domínio de e-mail que provavelmente não existe (ex: `@gmial.cox`), antes de enviar o formulário.
+4. Vê aviso quando o e-mail já foi usado no evento (transparente, não-bloqueante).
+5. É bloqueado se tentar usar o mesmo WhatsApp duas vezes no mesmo evento (proteção contra duplo-clique e fraude).
+
+Posso aprovar e implementar?
