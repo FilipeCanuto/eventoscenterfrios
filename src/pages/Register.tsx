@@ -1037,6 +1037,7 @@ const Register = () => {
     isPending: createReg.isPending,
     brandColor,
     urgencyText,
+    warnings,
   };
 
   const wrapDark = (content: React.ReactNode) => (
