@@ -1018,7 +1018,14 @@ const Register = () => {
       }
       setSubmitted(true);
     } catch (err: any) {
-      toast.error(err.message || "Falha na inscrição");
+      const msg = (err?.message || "").toString();
+      if (/whatsapp/i.test(msg) && /already registered/i.test(msg)) {
+        toast.error("Este WhatsApp já está inscrito neste evento. Use outro número ou entre em contato com a organização.");
+      } else if (/email has reached/i.test(msg)) {
+        toast.error("Este e-mail já atingiu o número máximo de inscrições neste evento.");
+      } else {
+        toast.error(msg || "Falha na inscrição");
+      }
     } finally {
       submittingRef.current = false;
     }
