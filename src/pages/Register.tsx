@@ -607,6 +607,21 @@ const RegistrationForm = ({
               {emailInvalid && (
                 <p className="text-xs text-destructive">Informe um e-mail válido, ex.: voce@email.com.</p>
               )}
+              {isEmail && !emailInvalid && warnings?.emailDomainInvalid && (
+                <p className="text-xs text-amber-600 dark:text-amber-400">
+                  Não encontramos o servidor de e-mail para <strong>{warnings.emailDomainInvalid.domain}</strong>. Confira se está correto antes de continuar.
+                </p>
+              )}
+              {isEmail && !emailInvalid && warnings?.emailShared && (
+                <p className="text-xs text-muted-foreground">
+                  Este e-mail já está vinculado a outra inscrição neste evento. Tudo bem se for família/grupo — só o primeiro inscrito recebe a confirmação por e-mail. Cada pessoa terá seu próprio QR code de check-in.
+                </p>
+              )}
+              {isPhone && !phoneInvalid && warnings?.whatsappTaken && (
+                <p className="text-xs text-destructive">
+                  Este WhatsApp já está inscrito neste evento. Se for outra pessoa, use um número diferente.
+                </p>
+              )}
             </>
           )}
         </div>
