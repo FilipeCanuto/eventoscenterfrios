@@ -589,6 +589,10 @@ export type Database = {
       }
     }
     Functions: {
+      count_registrations_by_email: {
+        Args: { p_email: string; p_event_id: string }
+        Returns: number
+      }
       get_check_in_window: {
         Args: { p_registration_id: string }
         Returns: {
@@ -631,6 +635,10 @@ export type Database = {
         Returns: string
       }
       unsubscribe_reminders: { Args: { p_token: string }; Returns: string }
+      whatsapp_registered_for_event: {
+        Args: { p_event_id: string; p_whatsapp: string }
+        Returns: boolean
+      }
     }
     Enums: {
       app_role: "admin" | "editor" | "viewer"
