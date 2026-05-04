@@ -946,6 +946,10 @@ const Register = () => {
       toast.error("Informe um e-mail válido (ex.: voce@email.com).");
       return;
     }
+    if (warnings.whatsappTaken) {
+      toast.error("Este WhatsApp já está inscrito neste evento. Use outro número ou entre em contato com a organização.");
+      return;
+    }
     submittingRef.current = true;
     try {
       const utms = utmsRef.current || {};
