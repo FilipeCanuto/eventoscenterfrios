@@ -129,7 +129,7 @@ const Attendees = () => {
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-3xl font-display font-bold">Participantes</h1>
-          <p className="text-muted-foreground">Gerencie e exporte os dados dos seus participantes.</p>
+          <p className="text-muted-foreground">{"\n"}</p>
         </div>
         <ExportMenu
           items={filtered}
