@@ -468,6 +468,12 @@ const EventInfo = ({ event, className = "" }: { event: Event; className?: string
   );
 };
 
+type FieldWarnings = {
+  emailDomainInvalid?: { domain: string };
+  emailShared?: { count: number };
+  whatsappTaken?: boolean;
+};
+
 const RegistrationForm = ({
   formFields,
   formData,
@@ -480,6 +486,7 @@ const RegistrationForm = ({
   brandColor,
   urgencyText,
   className = "",
+  warnings,
 }: {
   formFields: FormField[] | undefined;
   formData: Record<string, string>;
@@ -492,6 +499,7 @@ const RegistrationForm = ({
   brandColor: string;
   urgencyText?: string;
   className?: string;
+  warnings?: FieldWarnings;
 }) => {
   return (
   <form onSubmit={onSubmit} className={`space-y-4 ${className}`} noValidate>
