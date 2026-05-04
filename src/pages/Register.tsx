@@ -468,6 +468,12 @@ const EventInfo = ({ event, className = "" }: { event: Event; className?: string
   );
 };
 
+type FieldWarnings = {
+  emailDomainInvalid?: { domain: string };
+  emailShared?: { count: number };
+  whatsappTaken?: boolean;
+};
+
 const RegistrationForm = ({
   formFields,
   formData,
@@ -480,6 +486,7 @@ const RegistrationForm = ({
   brandColor,
   urgencyText,
   className = "",
+  warnings,
 }: {
   formFields: FormField[] | undefined;
   formData: Record<string, string>;
@@ -492,6 +499,7 @@ const RegistrationForm = ({
   brandColor: string;
   urgencyText?: string;
   className?: string;
+  warnings?: FieldWarnings;
 }) => {
   return (
   <form onSubmit={onSubmit} className={`space-y-4 ${className}`} noValidate>
@@ -599,6 +607,21 @@ const RegistrationForm = ({
               {emailInvalid && (
                 <p className="text-xs text-destructive">Informe um e-mail válido, ex.: voce@email.com.</p>
               )}
+              {isEmail && !emailInvalid && warnings?.emailDomainInvalid && (
+                <p className="text-xs text-amber-600 dark:text-amber-400">
+                  Não encontramos o servidor de e-mail para <strong>{warnings.emailDomainInvalid.domain}</strong>. Confira se está correto antes de continuar.
+                </p>
+              )}
+              {isEmail && !emailInvalid && warnings?.emailShared && (
+                <p className="text-xs text-muted-foreground">
+                  Este e-mail já está vinculado a outra inscrição neste evento. Tudo bem se for família/grupo — só o primeiro inscrito recebe a confirmação por e-mail. Cada pessoa terá seu próprio QR code de check-in.
+                </p>
+              )}
+              {isPhone && !phoneInvalid && warnings?.whatsappTaken && (
+                <p className="text-xs text-destructive">
+                  Este WhatsApp já está inscrito neste evento. Se for outra pessoa, use um número diferente.
+                </p>
+              )}
             </>
           )}
         </div>
@@ -679,6 +702,8 @@ const Register = () => {
   const formStartedRef = useRef(false);
   const submittingRef = useRef(false);
   const lastTrackedRef = useRef<{ email?: string; name?: string; whatsapp?: string }>({});
+  const [warnings, setWarnings] = useState<FieldWarnings>({});
+  const checkedDomainsRef = useRef<Set<string>>(new Set());
 
   useEffect(() => {
     utmsRef.current = captureUtms(searchParams);
@@ -722,9 +747,10 @@ const Register = () => {
     const lower = label.toLowerCase();
     const payload: Parameters<typeof trackPageView>[1] = {};
     if (lower.includes("e-mail") || lower.includes("email")) {
-      if (lastTrackedRef.current.email === value) return;
-      lastTrackedRef.current.email = value;
-      payload.partial_email = value;
+      if (lastTrackedRef.current.email !== value) {
+        lastTrackedRef.current.email = value;
+        payload.partial_email = value;
+      }
       // Sugere correção de typos comuns de domínio (gmial.com → gmail.com).
       const fix = suggestEmailFix(value);
       if (fix) {
@@ -736,14 +762,65 @@ const Register = () => {
           },
         });
       }
+      // Validação leve de e-mail compartilhado e de domínio MX.
+      const normalized = normalizeEmail(value);
+      if (EMAIL_RE.test(normalized)) {
+        // (a) Conta inscrições com mesmo e-mail no evento (aviso amigável).
+        supabase
+          .rpc("count_registrations_by_email" as never, {
+            p_event_id: event.id,
+            p_email: normalized,
+          } as never)
+          .then(({ data, error }) => {
+            if (error) return;
+            const count = (data as number) || 0;
+            setWarnings((w) => ({
+              ...w,
+              emailShared: count > 0 ? { count } : undefined,
+            }));
+          });
+        // (b) Verifica se o domínio tem MX (uma vez por domínio na sessão).
+        const domain = normalized.split("@")[1] || "";
+        if (domain && !checkedDomainsRef.current.has(domain)) {
+          checkedDomainsRef.current.add(domain);
+          supabase.functions
+            .invoke("validate-email-domain", { body: { email: normalized } })
+            .then(({ data, error }) => {
+              if (error || !data) return;
+              const valid = (data as { valid?: boolean }).valid;
+              setWarnings((w) => ({
+                ...w,
+                emailDomainInvalid: valid === false ? { domain } : undefined,
+              }));
+            })
+            .catch(() => {/* falha silenciosa: não bloqueia */});
+        }
+      } else {
+        setWarnings((w) => ({ ...w, emailShared: undefined, emailDomainInvalid: undefined }));
+      }
     } else if (lower.includes("nome") || lower.includes("name")) {
       if (lastTrackedRef.current.name === value) return;
       lastTrackedRef.current.name = value;
       payload.partial_name = value;
     } else if (isWhatsAppField(label)) {
-      if (lastTrackedRef.current.whatsapp === value) return;
-      lastTrackedRef.current.whatsapp = value;
-      payload.partial_whatsapp = value;
+      if (lastTrackedRef.current.whatsapp !== value) {
+        lastTrackedRef.current.whatsapp = value;
+        payload.partial_whatsapp = value;
+      }
+      // Verifica se o WhatsApp já está inscrito neste evento (bloqueante).
+      if (isValidBRPhone(value)) {
+        supabase
+          .rpc("whatsapp_registered_for_event" as never, {
+            p_event_id: event.id,
+            p_whatsapp: value,
+          } as never)
+          .then(({ data, error }) => {
+            if (error) return;
+            setWarnings((w) => ({ ...w, whatsappTaken: data === true }));
+          });
+      } else {
+        setWarnings((w) => ({ ...w, whatsappTaken: false }));
+      }
     } else {
       return;
     }
@@ -869,6 +946,10 @@ const Register = () => {
       toast.error("Informe um e-mail válido (ex.: voce@email.com).");
       return;
     }
+    if (warnings.whatsappTaken) {
+      toast.error("Este WhatsApp já está inscrito neste evento. Use outro número ou entre em contato com a organização.");
+      return;
+    }
     submittingRef.current = true;
     try {
       const utms = utmsRef.current || {};
@@ -937,7 +1018,14 @@ const Register = () => {
       }
       setSubmitted(true);
     } catch (err: any) {
-      toast.error(err.message || "Falha na inscrição");
+      const msg = (err?.message || "").toString();
+      if (/whatsapp/i.test(msg) && /already registered/i.test(msg)) {
+        toast.error("Este WhatsApp já está inscrito neste evento. Use outro número ou entre em contato com a organização.");
+      } else if (/email has reached/i.test(msg)) {
+        toast.error("Este e-mail já atingiu o número máximo de inscrições neste evento.");
+      } else {
+        toast.error(msg || "Falha na inscrição");
+      }
     } finally {
       submittingRef.current = false;
     }
@@ -960,6 +1048,7 @@ const Register = () => {
     isPending: createReg.isPending,
     brandColor,
     urgencyText,
+    warnings,
   };
 
   const wrapDark = (content: React.ReactNode) => (
