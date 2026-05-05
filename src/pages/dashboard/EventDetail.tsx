@@ -156,7 +156,7 @@ const EventDetail = () => {
               </div>
             </div>
             <EventQRCode
-              registrationUrl={`${window.location.origin}/register/${event.slug}`}
+              registrationUrl={`${window.location.hostname.includes("lovable") ? "https://eventos.centerfrios.com" : window.location.origin}/register/${event.slug}`}
               eventName={event.name}
             />
           </div>

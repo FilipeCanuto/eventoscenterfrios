@@ -1,6 +1,16 @@
 // Shared email templates for registration confirmation and warming reminders.
 // Pt-BR, fixed templates with dynamic variables.
 
+// QR Codes are served from our own edge function (no external dependency).
+const QR_BASE =
+  (typeof Deno !== "undefined" && Deno.env.get("SUPABASE_URL"))
+    ? `${Deno.env.get("SUPABASE_URL")}/functions/v1/qr-code`
+    : "https://ahwecyjzzczcwunptxae.supabase.co/functions/v1/qr-code";
+
+function qrUrl(checkInUrl: string, size: number) {
+  return `${QR_BASE}?size=${size}&data=${encodeURIComponent(checkInUrl)}`;
+}
+
 export interface EventLike {
   name: string;
   event_date: string | null;

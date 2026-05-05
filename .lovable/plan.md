@@ -1,84 +1,85 @@
-## Problema
+## Diagnóstico
 
-Hoje a função `register_for_event` bloqueia o 3º cadastro com o mesmo e-mail no mesmo evento (limite de 2). Famílias, casais e pessoas sem e-mail próprio ficam de fora. Ao mesmo tempo, precisamos:
-- Não inflar bounces no Resend (1 e-mail = N envios duplicados é ruim).
-- Manter rastreabilidade (saber quem é quem nos relatórios e check-in).
-- Reduzir typos no momento do cadastro (já temos correção de typo, mas não checamos se o domínio realmente recebe e-mail).
+Encontrei **dois problemas** com os QR Codes dos e-mails de confirmação e lembrete:
 
-## Solução proposta
+### 1. URL do check-in está apontando para o ambiente de PREVIEW (causa principal)
 
-### 1. Identidade primária = WhatsApp, e-mail = canal de contato
+Os e-mails estão sendo enviados com links para `https://6cb9424f-...lovableproject.com/check-in/...` em vez de `https://eventos.centerfrios.com/check-in/...`.
 
-Mudamos a chave de unicidade da inscrição. Em vez de "máx. 2 por e-mail", passa a ser:
+Quando o participante escaneia, o navegador abre a URL de preview do Lovable, que **exige login do Lovable** — daí a mensagem que o usuário relatou ("Pede para fazer login no Lovable"). Mesmo que carregasse, o QR Code embutido aponta para esse mesmo domínio.
 
-- **1 inscrição por (evento, WhatsApp)** — WhatsApp vira o identificador único da pessoa.
-- **E-mail pode se repetir livremente** dentro do evento.
-- Se WhatsApp não foi preenchido no formulário daquele evento, mantemos o limite atual de 2 por e-mail como fallback.
+**Causa**: na função `send-registration-confirmation` o `origin` é resolvido a partir do header `Origin` da requisição (que é o ambiente de quem disparou — preview), e só usa fallback se vier vazio. A função `process-reminder-queue` já usa `PUBLIC_ORIGIN` fixo (`https://eventos.centerfrios.com`), por isso o lembrete de 1 dia funcionou — mas a confirmação não.
 
-Isso resolve o caso real (esposa usando e-mail do marido, filho usando e-mail dos pais) sem perder a capacidade de detectar duplicatas reais (mesma pessoa clicando 2x).
+### 2. QR Code depende de serviço externo (`api.qrserver.com`)
 
-### 2. Apenas 1 e-mail de confirmação por endereço por evento
+Hoje todos os e-mails carregam a imagem de `https://api.qrserver.com/v1/create-qr-code/?...`. Se esse serviço cair, ficar lento, ou se o cliente de e-mail bloquear imagens externas (Outlook corporativo, Gmail em modo restrito), o QR aparece como **ícone quebrado / quadrado vazio** — exatamente o sintoma reportado.
 
-Para não machucar a reputação no Resend quando 4 pessoas da mesma família usam o mesmo e-mail:
+Além disso, alguns provedores agressivos (Hotmail/Outlook) podem ter classificado esse domínio como tracker e bloqueado.
 
-- A 1ª inscrição com aquele e-mail naquele evento → envia confirmação normal (com QR code dela).
-- Da 2ª em diante com o mesmo e-mail no mesmo evento → envia **um único e-mail consolidado** listando todos os inscritos vinculados àquele endereço, com o QR code de cada um. Se o e-mail consolidado já foi enviado nas últimas 10 min, apenas atualiza-se o registro como "agrupado" sem reenviar.
-- Cada inscrito ainda recebe o WhatsApp de confirmação individual (se tivermos integração) e tem seu próprio QR code acessível pelo link público.
+---
 
-Resultado: o Resend vê 1 envio por endereço/evento em vez de 4, mas todos os participantes ficam com confirmação válida.
+## Plano de correção
 
-### 3. Validação MX em tempo real no formulário
+### Passo 1 — Travar o domínio público do check-in
 
-Hoje validamos formato + corrigimos typos conhecidos. Vamos adicionar uma checagem extra **no blur do campo de e-mail**:
+Na função `send-registration-confirmation`, substituir a lógica de `origin` por uma constante fixa `PUBLIC_ORIGIN = "https://eventos.centerfrios.com"` (mesmo padrão do `process-reminder-queue`). Header `Origin` da request passa a ser ignorado.
 
-- Nova edge function `validate-email-domain` (pública, rate-limited por IP) que recebe um e-mail e faz lookup MX do domínio via DNS-over-HTTPS (Cloudflare 1.1.1.1).
-- Cache em memória de 24h por domínio para evitar chamadas repetidas.
-- Resposta: `{ valid: true }` ou `{ valid: false, reason: "no_mx", suggestion?: "gmail.com" }`.
-- No frontend, ao sair do campo: se o domínio não tem MX, mostra aviso amigável **não-bloqueante** ("Não encontramos o servidor de e-mail para `dominio.xyz`. Confira se está correto.") com botão "Usar mesmo assim". Não bloqueia o envio — só alerta.
-- Mantém toda a validação de formato/typo atual como primeira camada (instantânea, sem chamada de rede).
+Resultado: todos os QR Codes e botões de check-in passam a abrir `eventos.centerfrios.com/check-in/<id>` — domínio público, sem login.
 
-### 4. UX no formulário
+### Passo 2 — Gerar o QR Code internamente (sem depender de qrserver.com)
 
-- Quando o usuário digita um WhatsApp já cadastrado naquele evento, mostramos mensagem clara: "Este WhatsApp já está inscrito. Se for outra pessoa, use um número diferente."
-- Quando digita um e-mail já usado naquele evento, mostramos um aviso informativo (não bloqueante): "Este e-mail já está vinculado a outra inscrição neste evento. Tudo bem se for família/grupo — o link de confirmação será enviado uma vez só, com todos os QR codes."
+Criar uma nova edge function `qr-code` que:
+- Recebe `?data=<url>&size=320`
+- Gera o PNG do QR Code com a lib `qrcode` (já instalada no projeto, roda no Deno)
+- Retorna `image/png` com cache de 30 dias (`Cache-Control: public, max-age=2592000, immutable`)
+- Sem JWT (`verify_jwt = false`) — precisa abrir direto no cliente de e-mail
+
+Trocar nas 4 funções de template (`confirmation`, `reminder_1d`, `reminder_2h`, `final_reminder`) o `qrSrc`:
+
+```ts
+const qrSrc = `${SUPABASE_URL}/functions/v1/qr-code?size=320&data=${encodeURIComponent(checkInUrl)}`;
+```
+
+Vantagens:
+- Imagem servida do mesmo Supabase que já tem boa reputação
+- Sem ponto de falha externo
+- Cacheável e rápido
+
+### Passo 3 — Reenviar confirmação para os 244 já enviados? (opcional)
+
+Os e-mails de confirmação **já enviados** continuam apontando para o domínio errado. Opções:
+
+- **A)** Não reenviar. Hoje é o dia 1 — todo mundo vai receber o lembrete `reminder_2h` (que já usa o domínio correto e passará a usar o QR interno após o fix). Esse e-mail tem o QR e o botão de check-in destacados.
+- **B)** Disparar um e-mail "atualização — seu QR Code está pronto" para os 268 inscritos com a URL correta + QR novo. Custa 268 envios da cota Resend.
+
+Recomendação: **A** (já que o lembrete 2h cobre todos e estamos em cooldown de cota).
+
+### Passo 4 — Pequeno ajuste no painel (opcional, não-bloqueante)
+
+`EventQRCode.tsx` (preview do painel) usa a lib `qrcode` no canvas — está OK. Mas o link gerado usa `window.location.origin`, então quando o organizador acessa pelo preview do Lovable, o QR no painel aponta para o domínio errado. Trocar para usar o `published_url` do evento ou uma constante.
+
+---
 
 ## Detalhes técnicos
 
-**Migration (schema):**
-- Adicionar índice único parcial em `registrations(event_id, lead_whatsapp)` onde `lead_whatsapp IS NOT NULL AND status != 'cancelled'`.
-- Reescrever `register_for_event` para:
-  - Validar duplicata por WhatsApp quando presente (1 max).
-  - Manter validação por e-mail apenas como fallback quando WhatsApp ausente, e elevar limite de 2 → configurável (default 5 por e-mail/evento).
+**Arquivos a alterar:**
+- `supabase/functions/send-registration-confirmation/index.ts` — fixar `PUBLIC_ORIGIN`
+- `supabase/functions/_shared/email-templates.ts` — trocar 4 ocorrências de `api.qrserver.com` por endpoint interno
+- `supabase/functions/qr-code/index.ts` — **novo**, gera PNG via `npm:qrcode`
+- `supabase/config.toml` — registrar `qr-code` com `verify_jwt = false`
+- `src/components/event-detail/EventQRCode.tsx` — usar domínio publicado
 
-**Edge function nova: `validate-email-domain`**
-- Input: `{ email: string }`. CORS aberto, sem JWT.
-- Rate limit: 30 req/min por IP usando Map em memória.
-- Faz `fetch('https://cloudflare-dns.com/dns-query?name=DOMAIN&type=MX', { headers: { accept: 'application/dns-json' }})`.
-- Cache por domínio em memória da função (TTL 24h).
-- Retorna `valid` baseado em ter ao menos 1 registro MX.
+**Sem migração de banco.** Sem mudança em RLS. Sem novos secrets.
 
-**Edge function modificada: `send-registration-confirmation`**
-- Antes de enviar, contar quantas inscrições daquele evento usam o mesmo `lead_email`.
-- Se for a 1ª → envio normal.
-- Se for 2ª+ e já existe envio recente (< 10 min) com `template_name = 'group_confirmation'` para esse e-mail/evento → marca log como `grouped` e não chama Resend.
-- Caso contrário → renderiza template "consolidado" listando todos os participantes vinculados ao e-mail e envia 1 mensagem.
+**Validação após implementar:**
+1. Acessar diretamente `https://ahwecyjzzczcwunptxae.supabase.co/functions/v1/qr-code?data=https://eventos.centerfrios.com&size=240` → deve baixar PNG do QR
+2. Abrir preview de e-mail no painel → QR deve aparecer
+3. Escanear com celular → deve abrir `eventos.centerfrios.com/check-in/<id>` e marcar presença
 
-**Frontend (`src/pages/Register.tsx`):**
-- Adicionar `onBlur` no campo de e-mail chamando `validate-email-domain` com debounce.
-- Estado `emailDomainWarning` exibido como `<Alert>` informativo abaixo do campo, com botão "Usar mesmo assim" que silencia o aviso.
-- Ao detectar e-mail já existente no evento (consulta leve via RPC pública nova `count_registrations_by_email(event_id, email)`), mostrar nota informativa de "envio agrupado".
-- Ao detectar WhatsApp já existente no evento, bloquear submit com mensagem clara.
+---
 
-**Compatibilidade:**
-- Inscrições existentes não são afetadas (índice é parcial, e a função só valida em novos inserts).
-- Logs históricos no `email_send_log` continuam válidos.
+## Observação sobre a cota Resend
 
-## Resumo do que muda para o usuário final
+Continuamos em cooldown até ~15:46 UTC (12:46 BRT). Esse fix **não** consome envios — só corrige o conteúdo dos próximos lembretes que sairão da fila assim que a cota liberar (ou após upgrade do plano).
 
-1. Pode inscrever toda a família com o mesmo e-mail, contanto que cada um tenha seu WhatsApp.
-2. Recebe um único e-mail de confirmação consolidado (com todos os QR codes) em vez de 4 mensagens iguais.
-3. Vê aviso amigável quando digita um domínio de e-mail que provavelmente não existe (ex: `@gmial.cox`), antes de enviar o formulário.
-4. Vê aviso quando o e-mail já foi usado no evento (transparente, não-bloqueante).
-5. É bloqueado se tentar usar o mesmo WhatsApp duas vezes no mesmo evento (proteção contra duplo-clique e fraude).
-
-Posso aprovar e implementar?
+Posso seguir?
