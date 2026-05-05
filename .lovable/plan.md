@@ -1,85 +1,55 @@
-## Diagnóstico
+# Plano: Página pública de check-in por e-mail
 
-Encontrei **dois problemas** com os QR Codes dos e-mails de confirmação e lembrete:
+Página simples e pública (sem login, sem QR individual) onde o participante digita o e-mail e o sistema faz o check-in automaticamente, baseado nos eventos que estão acontecendo hoje (dentro da janela de check-in: 4h antes até 4h depois).
 
-### 1. URL do check-in está apontando para o ambiente de PREVIEW (causa principal)
+## Rota e UX
 
-Os e-mails estão sendo enviados com links para `https://6cb9424f-...lovableproject.com/check-in/...` em vez de `https://eventos.centerfrios.com/check-in/...`.
+- Nova rota pública: `/checkin-rapido` (no `App.tsx`, fora do dashboard, lazy-loaded).
+- Layout idêntico ao `/check-in/:registrationId` atual (Logo + Card centralizado, mobile-first, mesmas cores/tipografia).
+- Fluxo:
+  1. Tela inicial: input grande de e-mail + botão "Fazer check-in" (rounded-full, primary). Texto auxiliar: "Digite o e-mail usado na sua inscrição".
+  2. Ao enviar → spinner → resultado.
+  3. Resultado de sucesso: mesma tela `✅ Check-in Realizado` + nome + evento + confetti (reaproveita o componente visual do `CheckIn.tsx`).
+  4. Erros amigáveis em pt-BR:
+     - `not_found` → "Não encontramos sua inscrição. Verifique o e-mail ou procure a equipe na recepção."
+     - `outside_window` → "Nenhum evento está aberto para check-in agora."
+     - `cancelled` → "Inscrição cancelada. Procure a equipe."
+     - `multiple_events` → mostra os eventos abertos hoje (botões com nome do evento) para o participante escolher; o segundo clique reenvia com `event_id` específico.
+- Botão "Tentar outro e-mail" para recomeçar sem refresh.
 
-Quando o participante escaneia, o navegador abre a URL de preview do Lovable, que **exige login do Lovable** — daí a mensagem que o usuário relatou ("Pede para fazer login no Lovable"). Mesmo que carregasse, o QR Code embutido aponta para esse mesmo domínio.
+## Backend (RPC SECURITY DEFINER)
 
-**Causa**: na função `send-registration-confirmation` o `origin` é resolvido a partir do header `Origin` da requisição (que é o ambiente de quem disparou — preview), e só usa fallback se vier vazio. A função `process-reminder-queue` já usa `PUBLIC_ORIGIN` fixo (`https://eventos.centerfrios.com`), por isso o lembrete de 1 dia funcionou — mas a confirmação não.
+Como `registrations` tem RLS restrita a donos do evento, criar uma função pública que faz toda a lógica server-side:
 
-### 2. QR Code depende de serviço externo (`api.qrserver.com`)
+`public.public_check_in_by_email(p_email text, p_event_id uuid default null) returns jsonb`
 
-Hoje todos os e-mails carregam a imagem de `https://api.qrserver.com/v1/create-qr-code/?...`. Se esse serviço cair, ficar lento, ou se o cliente de e-mail bloquear imagens externas (Outlook corporativo, Gmail em modo restrito), o QR aparece como **ícone quebrado / quadrado vazio** — exatamente o sintoma reportado.
+Lógica:
+1. Normaliza e valida e-mail (lower/trim, regex básico, max 255).
+2. Busca registrations não canceladas onde `lower(lead_email) = p_email`, juntando com `events` que estejam:
+   - `status = 'live'`
+   - dentro da janela `event_date - 4h <= now() <= coalesce(event_end_date, event_date) + 4h`
+   - Se `p_event_id` informado, filtra por ele.
+3. Casos:
+   - 0 registros → retorna `{status: 'not_found'}`. Se houver registro fora de janela, retorna `{status: 'outside_window'}`.
+   - >1 evento distinto e `p_event_id` não informado → retorna `{status: 'multiple_events', events: [{id, name}]}`.
+   - 1 registro: faz `UPDATE` para `checked_in` (idempotente: se já estava checked_in, retorna `already_checked_in`); retorna `{status: 'success'|'already_checked_in', name, event_name, primary_color}`.
+4. Rate-limit leve via guard de tamanho de input (já é o suficiente para esse uso de recepção).
 
-Além disso, alguns provedores agressivos (Hotmail/Outlook) podem ter classificado esse domínio como tracker e bloqueado.
+A função substitui a necessidade de chamar `public_check_in(uuid)` do cliente sem expor a tabela.
 
----
+## Arquivos a criar/editar
 
-## Plano de correção
+1. **Migration SQL** — cria `public_check_in_by_email` (SECURITY DEFINER, search_path = public) e concede `EXECUTE` para `anon, authenticated`.
+2. **`src/pages/CheckInRapido.tsx`** (novo) — formulário + estados (idle/loading/success/error/multiple), chamada via `supabase.rpc("public_check_in_by_email", { p_email, p_event_id })`. Reaproveita o visual de sucesso (confetti, ✅, h1, brand color do evento).
+3. **`src/App.tsx`** — adicionar `const CheckInRapido = lazy(...)` e `<Route path="/checkin-rapido" element={<CheckInRapido />} />` na seção pública.
 
-### Passo 1 — Travar o domínio público do check-in
+## Como usar no dia do evento
 
-Na função `send-registration-confirmation`, substituir a lógica de `origin` por uma constante fixa `PUBLIC_ORIGIN = "https://eventos.centerfrios.com"` (mesmo padrão do `process-reminder-queue`). Header `Origin` da request passa a ser ignorado.
+- Imprimir um QR Code único apontando para `https://eventos.centerfrios.com/checkin-rapido` e colar na recepção.
+- Participante escaneia → digita e-mail → check-in concluído.
+- Funciona mesmo se ele não recebeu (ou perdeu) o e-mail individual com QR.
 
-Resultado: todos os QR Codes e botões de check-in passam a abrir `eventos.centerfrios.com/check-in/<id>` — domínio público, sem login.
+## Não incluído (por escopo)
 
-### Passo 2 — Gerar o QR Code internamente (sem depender de qrserver.com)
-
-Criar uma nova edge function `qr-code` que:
-- Recebe `?data=<url>&size=320`
-- Gera o PNG do QR Code com a lib `qrcode` (já instalada no projeto, roda no Deno)
-- Retorna `image/png` com cache de 30 dias (`Cache-Control: public, max-age=2592000, immutable`)
-- Sem JWT (`verify_jwt = false`) — precisa abrir direto no cliente de e-mail
-
-Trocar nas 4 funções de template (`confirmation`, `reminder_1d`, `reminder_2h`, `final_reminder`) o `qrSrc`:
-
-```ts
-const qrSrc = `${SUPABASE_URL}/functions/v1/qr-code?size=320&data=${encodeURIComponent(checkInUrl)}`;
-```
-
-Vantagens:
-- Imagem servida do mesmo Supabase que já tem boa reputação
-- Sem ponto de falha externo
-- Cacheável e rápido
-
-### Passo 3 — Reenviar confirmação para os 244 já enviados? (opcional)
-
-Os e-mails de confirmação **já enviados** continuam apontando para o domínio errado. Opções:
-
-- **A)** Não reenviar. Hoje é o dia 1 — todo mundo vai receber o lembrete `reminder_2h` (que já usa o domínio correto e passará a usar o QR interno após o fix). Esse e-mail tem o QR e o botão de check-in destacados.
-- **B)** Disparar um e-mail "atualização — seu QR Code está pronto" para os 268 inscritos com a URL correta + QR novo. Custa 268 envios da cota Resend.
-
-Recomendação: **A** (já que o lembrete 2h cobre todos e estamos em cooldown de cota).
-
-### Passo 4 — Pequeno ajuste no painel (opcional, não-bloqueante)
-
-`EventQRCode.tsx` (preview do painel) usa a lib `qrcode` no canvas — está OK. Mas o link gerado usa `window.location.origin`, então quando o organizador acessa pelo preview do Lovable, o QR no painel aponta para o domínio errado. Trocar para usar o `published_url` do evento ou uma constante.
-
----
-
-## Detalhes técnicos
-
-**Arquivos a alterar:**
-- `supabase/functions/send-registration-confirmation/index.ts` — fixar `PUBLIC_ORIGIN`
-- `supabase/functions/_shared/email-templates.ts` — trocar 4 ocorrências de `api.qrserver.com` por endpoint interno
-- `supabase/functions/qr-code/index.ts` — **novo**, gera PNG via `npm:qrcode`
-- `supabase/config.toml` — registrar `qr-code` com `verify_jwt = false`
-- `src/components/event-detail/EventQRCode.tsx` — usar domínio publicado
-
-**Sem migração de banco.** Sem mudança em RLS. Sem novos secrets.
-
-**Validação após implementar:**
-1. Acessar diretamente `https://ahwecyjzzczcwunptxae.supabase.co/functions/v1/qr-code?data=https://eventos.centerfrios.com&size=240` → deve baixar PNG do QR
-2. Abrir preview de e-mail no painel → QR deve aparecer
-3. Escanear com celular → deve abrir `eventos.centerfrios.com/check-in/<id>` e marcar presença
-
----
-
-## Observação sobre a cota Resend
-
-Continuamos em cooldown até ~15:46 UTC (12:46 BRT). Esse fix **não** consome envios — só corrige o conteúdo dos próximos lembretes que sairão da fila assim que a cota liberar (ou após upgrade do plano).
-
-Posso seguir?
+- Sem busca por nome/WhatsApp (manter mínimo). Se quiser depois, posso adicionar fallback "tentar por WhatsApp".
+- Sem auth, sem captcha (a operação é idempotente e limitada à janela do evento — risco baixo).
