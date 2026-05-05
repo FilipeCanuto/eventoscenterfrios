@@ -66,6 +66,7 @@ const App = () => (
                 <Route path="/auth" element={<Auth />} />
                 <Route path="/register/:slug" element={<Register />} />
                 <Route path="/check-in/:registrationId" element={<CheckIn />} />
+                <Route path="/checkin-rapido" element={<CheckInRapido />} />
                 <Route path="/unsubscribe-reminders/:token" element={<UnsubscribeReminders />} />
                 <Route path="/company/:companySlug" element={<CompanyPage />} />
                 <Route path="/privacidade" element={<PrivacyPolicy />} />
