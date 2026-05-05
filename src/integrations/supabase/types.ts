@@ -611,6 +611,10 @@ export type Database = {
         Returns: boolean
       }
       public_check_in: { Args: { p_registration_id: string }; Returns: string }
+      public_check_in_by_email: {
+        Args: { p_email: string; p_event_id?: string }
+        Returns: Json
+      }
       register_for_event:
         | { Args: { p_data: Json; p_event_id: string }; Returns: string }
         | {
