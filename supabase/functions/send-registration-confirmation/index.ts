@@ -274,10 +274,9 @@ serve(async (req) => {
       });
     }
 
-    const origin =
-      body.origin?.replace(/\/$/, "") ||
-      req.headers.get("origin")?.replace(/\/$/, "") ||
-      "https://eventos.centerfrios.com";
+    // Always use the public production domain — never the preview/lovable origin,
+    // otherwise check-in links require a Lovable login.
+    const origin = "https://eventos.centerfrios.com";
 
     const built = buildConfirmation({
       registrationId: reg.id,
