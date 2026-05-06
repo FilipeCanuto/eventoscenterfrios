@@ -1,55 +1,82 @@
-# Plano: Página pública de check-in por e-mail
+## Diagnóstico
 
-Página simples e pública (sem login, sem QR individual) onde o participante digita o e-mail e o sistema faz o check-in automaticamente, baseado nos eventos que estão acontecendo hoje (dentro da janela de check-in: 4h antes até 4h depois).
+Evento ativo: **Circuito Experience: Centerfrios & Skymsen**
+- `event_date`: 05/05 14h (BRT) → `event_end_date`: 07/05 18h (BRT)
+- `registration_deadline`: 05/05 14h (BRT) — **já expirou** ⇒ novas inscrições estão sendo rejeitadas pela função `register_for_event`.
+- 269 inscritos, 15 com check-in, sem cancelados. Janela do `/checkin-rapido` está aberta (até 07/05 22h BRT).
 
-## Rota e UX
+### Por que alguns check-ins falham
+A função `public_check_in_by_email` está correta. Os erros que vocês veem são quase todos `not_found` — pessoas que **nunca se inscreveram** e por isso não aparecem na busca por e-mail. Hoje a única saída é mandá-las à recepção. Vamos resolver permitindo inscrição + check-in na hora.
 
-- Nova rota pública: `/checkin-rapido` (no `App.tsx`, fora do dashboard, lazy-loaded).
-- Layout idêntico ao `/check-in/:registrationId` atual (Logo + Card centralizado, mobile-first, mesmas cores/tipografia).
-- Fluxo:
-  1. Tela inicial: input grande de e-mail + botão "Fazer check-in" (rounded-full, primary). Texto auxiliar: "Digite o e-mail usado na sua inscrição".
-  2. Ao enviar → spinner → resultado.
-  3. Resultado de sucesso: mesma tela `✅ Check-in Realizado` + nome + evento + confetti (reaproveita o componente visual do `CheckIn.tsx`).
-  4. Erros amigáveis em pt-BR:
-     - `not_found` → "Não encontramos sua inscrição. Verifique o e-mail ou procure a equipe na recepção."
-     - `outside_window` → "Nenhum evento está aberto para check-in agora."
-     - `cancelled` → "Inscrição cancelada. Procure a equipe."
-     - `multiple_events` → mostra os eventos abertos hoje (botões com nome do evento) para o participante escolher; o segundo clique reenvia com `event_id` específico.
-- Botão "Tentar outro e-mail" para recomeçar sem refresh.
+Há também 38 e-mails duplicados (ex.: 3 inscrições do mesmo e-mail). A função já trata: pega a mais recente. Não é causa de erro.
 
-## Backend (RPC SECURITY DEFINER)
+---
 
-Como `registrations` tem RLS restrita a donos do evento, criar uma função pública que faz toda a lógica server-side:
+## Plano de correção
 
-`public.public_check_in_by_email(p_email text, p_event_id uuid default null) returns jsonb`
+### 1. Permitir inscrição até o fim do evento
 
-Lógica:
-1. Normaliza e valida e-mail (lower/trim, regex básico, max 255).
-2. Busca registrations não canceladas onde `lower(lead_email) = p_email`, juntando com `events` que estejam:
-   - `status = 'live'`
-   - dentro da janela `event_date - 4h <= now() <= coalesce(event_end_date, event_date) + 4h`
-   - Se `p_event_id` informado, filtra por ele.
-3. Casos:
-   - 0 registros → retorna `{status: 'not_found'}`. Se houver registro fora de janela, retorna `{status: 'outside_window'}`.
-   - >1 evento distinto e `p_event_id` não informado → retorna `{status: 'multiple_events', events: [{id, name}]}`.
-   - 1 registro: faz `UPDATE` para `checked_in` (idempotente: se já estava checked_in, retorna `already_checked_in`); retorna `{status: 'success'|'already_checked_in', name, event_name, primary_color}`.
-4. Rate-limit leve via guard de tamanho de input (já é o suficiente para esse uso de recepção).
+Atualizar a função `register_for_event` para que o prazo efetivo seja **`COALESCE(registration_deadline, event_end_date, event_date)`**, mas **nunca antes do `event_end_date`**. Ou seja, inscrição fica aberta até o último minuto do último dia.
 
-A função substitui a necessidade de chamar `public_check_in(uuid)` do cliente sem expor a tabela.
+Em SQL: trocar
+```
+IF registration_deadline IS NOT NULL AND now() > registration_deadline THEN reject
+```
+por
+```
+v_cutoff := GREATEST(
+  COALESCE(v_event.registration_deadline, 'epoch'::timestamptz),
+  COALESCE(v_event.event_end_date, v_event.event_date, 'infinity'::timestamptz)
+);
+IF now() > v_cutoff THEN reject
+```
 
-## Arquivos a criar/editar
+Resultado: enquanto o evento estiver "live" e dentro do `event_end_date`, a inscrição é aceita — mesmo após o `registration_deadline` antigo.
 
-1. **Migration SQL** — cria `public_check_in_by_email` (SECURITY DEFINER, search_path = public) e concede `EXECUTE` para `anon, authenticated`.
-2. **`src/pages/CheckInRapido.tsx`** (novo) — formulário + estados (idle/loading/success/error/multiple), chamada via `supabase.rpc("public_check_in_by_email", { p_email, p_event_id })`. Reaproveita o visual de sucesso (confetti, ✅, h1, brand color do evento).
-3. **`src/App.tsx`** — adicionar `const CheckInRapido = lazy(...)` e `<Route path="/checkin-rapido" element={<CheckInRapido />} />` na seção pública.
+### 2. Inscrição + check-in na hora pelo `/checkin-rapido`
 
-## Como usar no dia do evento
+Adicionar fluxo secundário na mesma página:
 
-- Imprimir um QR Code único apontando para `https://eventos.centerfrios.com/checkin-rapido` e colar na recepção.
-- Participante escaneia → digita e-mail → check-in concluído.
-- Funciona mesmo se ele não recebeu (ou perdeu) o e-mail individual com QR.
+- Quando o resultado for `not_found`, em vez de só "Procure a recepção", mostrar botão **"Não tenho inscrição — fazer agora"**.
+- Abre um mini-form (mesmos campos mínimos do registro: Nome, E-mail pré-preenchido, WhatsApp).
+- Submit chama:
+  1. `register_for_event(p_event_id, p_data)` com o evento aberto (escolhe automaticamente se houver só um evento "live" agora; se houver mais de um, pede para escolher antes — reaproveita o estado `multiple_events`).
+  2. Em sequência, `public_check_in_by_email(email, event_id)` para já marcar presença.
+- Sucesso: mostra a mesma tela ✅ "Check-in Realizado" + confete.
 
-## Não incluído (por escopo)
+Como o `/checkin-rapido` é público (anon), o `register_for_event` já é `SECURITY DEFINER` e aceita chamadas anônimas — sem mudança de RLS.
 
-- Sem busca por nome/WhatsApp (manter mínimo). Se quiser depois, posso adicionar fallback "tentar por WhatsApp".
-- Sem auth, sem captcha (a operação é idempotente e limitada à janela do evento — risco baixo).
+Para descobrir o evento aberto sem precisar do e-mail existir, criar uma RPC auxiliar:
+```
+public_get_open_events_for_checkin() returns jsonb
+  -- lista eventos live cuja janela de check-in está aberta agora
+```
+Pública (anon EXECUTE). Usada apenas para popular o seletor quando há mais de um evento simultâneo.
+
+### 3. Pequenos polimentos no `/checkin-rapido`
+
+- Mensagem de `not_found` passa a sugerir o botão "Inscrever agora".
+- Texto do `outside_window` mantido.
+- Manter botão "Próximo participante" para limpar e atender o próximo.
+
+### 4. Validação
+
+- Testar `register_for_event` chamando via `curl` (sem auth) com payload mínimo após a migration.
+- Testar `public_check_in_by_email` com e-mail recém-criado → deve retornar `success`.
+- Confirmar que duplicatas continuam respeitando os limites (`max 5 por e-mail`, `1 por WhatsApp`).
+
+---
+
+## Arquivos afetados
+
+- **Migration SQL** — atualiza `register_for_event` (deadline = fim do evento) e cria `public_get_open_events_for_checkin()` com GRANT para `anon`.
+- **`src/pages/CheckInRapido.tsx`** — adiciona fluxo "Inscrever agora" no estado `not_found`, mini-form, e chamada encadeada register→check-in.
+- (Sem mudança em RLS, edge functions ou tipos manuais.)
+
+---
+
+## Fora de escopo (intencional)
+
+- Não alteramos `registration_deadline` no banco (preserva intenção original de cada evento; a regra nova fica na função e vale para todos).
+- Não adicionamos captcha — a função já tem rate-limit de payload e o WhatsApp único por evento limita abuso.
+- Não mexemos no fluxo de e-mails de confirmação para inscrições "na hora" (o trigger existente já dispara a confirmação automaticamente).
