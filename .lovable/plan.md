@@ -1,82 +1,69 @@
-## Diagnóstico
+## Auditoria & Relatórios — Circuito Experience: Centerfrios & Skymsen
 
-Evento ativo: **Circuito Experience: Centerfrios & Skymsen**
-- `event_date`: 05/05 14h (BRT) → `event_end_date`: 07/05 18h (BRT)
-- `registration_deadline`: 05/05 14h (BRT) — **já expirou** ⇒ novas inscrições estão sendo rejeitadas pela função `register_for_event`.
-- 269 inscritos, 15 com check-in, sem cancelados. Janela do `/checkin-rapido` está aberta (até 07/05 22h BRT).
-
-### Por que alguns check-ins falham
-A função `public_check_in_by_email` está correta. Os erros que vocês veem são quase todos `not_found` — pessoas que **nunca se inscreveram** e por isso não aparecem na busca por e-mail. Hoje a única saída é mandá-las à recepção. Vamos resolver permitindo inscrição + check-in na hora.
-
-Há também 38 e-mails duplicados (ex.: 3 inscrições do mesmo e-mail). A função já trata: pega a mais recente. Não é causa de erro.
+Evento `cfd9d79d-78d3-45d8-bdc7-1250314ec2c4` — 277 inscrições, 20 check-ins, 0 cancelamentos, janela 05/05 14h → 07/05 18h (BRT).
 
 ---
 
-## Plano de correção
+### 1. Investigação dos erros do `/checkin-rapido`
 
-### 1. Permitir inscrição até o fim do evento
+Vou cruzar logs do Postgres (chamadas `public_check_in_by_email` nas últimas 72h) com a tabela `registrations` para classificar cada falha:
 
-Atualizar a função `register_for_event` para que o prazo efetivo seja **`COALESCE(registration_deadline, event_end_date, event_date)`**, mas **nunca antes do `event_end_date`**. Ou seja, inscrição fica aberta até o último minuto do último dia.
+- **`not_found`** — e-mail digitado não existe ⇒ pessoa não se inscreveu (esperado; já temos o fluxo "Inscrever agora").
+- **`outside_window`** — inscrição existe mas evento fora da janela (não deve ocorrer agora).
+- **`invalid_email`** — typo no e-mail digitado.
+- **`multiple_events`** — só 1 evento live, não deve ocorrer.
 
-Em SQL: trocar
-```
-IF registration_deadline IS NOT NULL AND now() > registration_deadline THEN reject
-```
-por
-```
-v_cutoff := GREATEST(
-  COALESCE(v_event.registration_deadline, 'epoch'::timestamptz),
-  COALESCE(v_event.event_end_date, v_event.event_date, 'infinity'::timestamptz)
-);
-IF now() > v_cutoff THEN reject
-```
+Resultado vai numa aba **"Erros Check-in"** com timestamp, e-mail tentado, status retornado e provável causa.
 
-Resultado: enquanto o evento estiver "live" e dentro do `event_end_date`, a inscrição é aceita — mesmo após o `registration_deadline` antigo.
+### 2. Limpeza de duplicatas (merge)
 
-### 2. Inscrição + check-in na hora pelo `/checkin-rapido`
+- 38 e-mails têm 2-3 inscrições (ex.: `nossacompra@hotmail.com` 3x, 1 com check-in).
+- **Regra**: para cada grupo de e-mails repetidos:
+  - Manter a inscrição **mais antiga** (`created_at` ASC).
+  - Se qualquer duplicata estiver `checked_in`, propagar status + `checked_in_at` para a mantida.
+  - Cancelar (`status='cancelled'`) as demais com nota em `tracking.merge_reason='duplicate_email_merged_<data>'`.
+- Total estimado: ~40 inscrições viram `cancelled`, mantendo o histórico (não deletamos).
+- Saída: aba **"Duplicatas Mescladas"** no Excel listando antes/depois.
 
-Adicionar fluxo secundário na mesma página:
+### 3. Geração dos relatórios
 
-- Quando o resultado for `not_found`, em vez de só "Procure a recepção", mostrar botão **"Não tenho inscrição — fazer agora"**.
-- Abre um mini-form (mesmos campos mínimos do registro: Nome, E-mail pré-preenchido, WhatsApp).
-- Submit chama:
-  1. `register_for_event(p_event_id, p_data)` com o evento aberto (escolhe automaticamente se houver só um evento "live" agora; se houver mais de um, pede para escolher antes — reaproveita o estado `multiple_events`).
-  2. Em sequência, `public_check_in_by_email(email, event_id)` para já marcar presença.
-- Sucesso: mostra a mesma tela ✅ "Check-in Realizado" + confete.
+**📊 Excel (`relatorio_circuito_experience.xlsx`)** com abas:
+1. **Resumo Executivo** — KPIs (total, check-ins, taxa, duplicatas, e-mails enviados/falhados).
+2. **Inscritos** — todos os 277, ordenados por data, com status atual e flag de duplicata.
+3. **Check-ins Realizados** — quem entrou, horário, dispositivo (se rastreado).
+4. **Pendentes** — inscritos sem check-in (lista para a recepção).
+5. **Duplicatas Mescladas** — auditoria da limpeza (item 2).
+6. **Erros Check-in** — análise do item 1.
+7. **Funil de Inscrição** — pageviews → form iniciado → abandono → conversão (de `event_page_views`).
+8. **Inscrições por Hora** — série temporal (BRT) para gráfico.
+9. **E-mails** — confirmações + lembretes (1d/2h): enviados, falhados, motivos.
 
-Como o `/checkin-rapido` é público (anon), o `register_for_event` já é `SECURITY DEFINER` e aceita chamadas anônimas — sem mudança de RLS.
-
-Para descobrir o evento aberto sem precisar do e-mail existir, criar uma RPC auxiliar:
-```
-public_get_open_events_for_checkin() returns jsonb
-  -- lista eventos live cuja janela de check-in está aberta agora
-```
-Pública (anon EXECUTE). Usada apenas para popular o seletor quando há mais de um evento simultâneo.
-
-### 3. Pequenos polimentos no `/checkin-rapido`
-
-- Mensagem de `not_found` passa a sugerir o botão "Inscrever agora".
-- Texto do `outside_window` mantido.
-- Manter botão "Próximo participante" para limpar e atender o próximo.
+**📄 PDF Executivo (`relatorio_circuito_experience.pdf`)** — 4-5 páginas:
+1. Capa + KPIs principais
+2. Funil de conversão (pageviews → inscritos → check-in) com gráfico
+3. Cronologia de inscrições + pico de tráfego
+4. Saúde dos e-mails (taxa de entrega, falhas)
+5. Achados da auditoria + recomendações para próximos eventos
 
 ### 4. Validação
 
-- Testar `register_for_event` chamando via `curl` (sem auth) com payload mínimo após a migration.
-- Testar `public_check_in_by_email` com e-mail recém-criado → deve retornar `success`.
-- Confirmar que duplicatas continuam respeitando os limites (`max 5 por e-mail`, `1 por WhatsApp`).
+- Após o merge: rodar `SELECT lower(lead_email), count(*) FROM registrations WHERE event_id=... AND status!='cancelled' GROUP BY 1 HAVING count(*)>1` ⇒ deve retornar zero.
+- Verificar que nenhum check-in foi perdido (count `checked_in` antes vs depois).
+- QA visual do PDF (página por página) e abertura do Excel.
 
 ---
 
-## Arquivos afetados
+### Arquivos entregues
 
-- **Migration SQL** — atualiza `register_for_event` (deadline = fim do evento) e cria `public_get_open_events_for_checkin()` com GRANT para `anon`.
-- **`src/pages/CheckInRapido.tsx`** — adiciona fluxo "Inscrever agora" no estado `not_found`, mini-form, e chamada encadeada register→check-in.
-- (Sem mudança em RLS, edge functions ou tipos manuais.)
+- `/mnt/documents/relatorio_circuito_experience.xlsx`
+- `/mnt/documents/relatorio_circuito_experience.pdf`
 
----
+### Mudanças no banco
 
-## Fora de escopo (intencional)
+- Apenas `UPDATE` em `registrations` para o merge (sem schema, sem deletes). Reversível pelo histórico em `tracking`.
 
-- Não alteramos `registration_deadline` no banco (preserva intenção original de cada evento; a regra nova fica na função e vale para todos).
-- Não adicionamos captcha — a função já tem rate-limit de payload e o WhatsApp único por evento limita abuso.
-- Não mexemos no fluxo de e-mails de confirmação para inscrições "na hora" (o trigger existente já dispara a confirmação automaticamente).
+### Fora de escopo
+
+- Não mexer em RLS, edge functions ou estrutura de tabelas.
+- Não alterar configuração do evento (datas, capacidade).
+- Não enviar e-mails — só relatar.
