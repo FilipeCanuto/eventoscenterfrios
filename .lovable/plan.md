@@ -1,69 +1,41 @@
-## Auditoria & Relatórios — Circuito Experience: Centerfrios & Skymsen
+## Objetivo
 
-Evento `cfd9d79d-78d3-45d8-bdc7-1250314ec2c4` — 277 inscrições, 20 check-ins, 0 cancelamentos, janela 05/05 14h → 07/05 18h (BRT).
+Preparar o evento **Workshop Vácuo em Ação** (hoje em rascunho, 19–20/08/2026, Showroom CENTERFRIOS Tabuleiro, cor `#c2a02d`) com identidade própria: favicon, e-mails branded e URL limpa.
 
----
+## 1. Favicon do evento
 
-### 1. Investigação dos erros do `/checkin-rapido`
+- Enviar a arte "Vácuo em Ação" para o CDN de assets e gerar uma versão quadrada otimizada para ícone (`favicon-vacuo.png`, 512px) em `public/`.
+- Hoje `Register.tsx` e `PrivacyPolicy.tsx` fixam `/favicon-circuito.png`. Trocar isso por um hook `useEventFavicon(event)` que escolhe o ícone conforme o evento carregado:
+  - evento Vácuo em Ação → `/favicon-vacuo.png`
+  - demais eventos → favicon atual do site
+- Aplicar nas páginas do evento: `/register/:slug`, tela de sucesso, `/check-in/:id` e `/checkin-rapido`. O restante do site continua com o ícone Centerfrios.
 
-Vou cruzar logs do Postgres (chamadas `public_check_in_by_email` nas últimas 72h) com a tabela `registrations` para classificar cada falha:
+## 2. E-mails do evento
 
-- **`not_found`** — e-mail digitado não existe ⇒ pessoa não se inscreveu (esperado; já temos o fluxo "Inscrever agora").
-- **`outside_window`** — inscrição existe mas evento fora da janela (não deve ocorrer agora).
-- **`invalid_email`** — typo no e-mail digitado.
-- **`multiple_events`** — só 1 evento live, não deve ocorrer.
+Templates em `supabase/functions/_shared/email-templates.ts` (confirmação, 7 dias, 1 dia, 2 horas):
 
-Resultado vai numa aba **"Erros Check-in"** com timestamp, e-mail tentado, status retornado e provável causa.
+- **Topo**: logomarca CENTERFRIOS (branca sobre a faixa da cor do evento) — hoje o topo só mostra texto quando `logo_url` está vazio.
+- **Arte do evento**: bloco visual da arte "Vácuo em Ação" logo abaixo do cabeçalho, largura total do card, cantos arredondados — aparece só quando o evento tem arte cadastrada (`background_image_url`), sem quebrar o layout do Circuito.
+- **Cor de marca**: os e-mails já usam `primary_color`; ajustar o contraste do texto do cabeçalho e do bloco de contagem regressiva para tons dourados escuros (`#c2a02d`) continuarem legíveis.
+- **Dados do evento**: conferir que "Quando" mostra corretamente evento de 2 dias (19/08 a 20/08, 11h–15h no fuso de São Paulo) e o local físico.
+- **Rodapé**: manter "powered by CENTERFRIOS" e o link de descadastro dos lembretes.
+- Cadastrar no evento a URL da logomarca CENTERFRIOS (`logo_url`) para que os e-mails já saiam branded.
 
-### 2. Limpeza de duplicatas (merge)
+## 3. Resend
 
-- 38 e-mails têm 2-3 inscrições (ex.: `nossacompra@hotmail.com` 3x, 1 com check-in).
-- **Regra**: para cada grupo de e-mails repetidos:
-  - Manter a inscrição **mais antiga** (`created_at` ASC).
-  - Se qualquer duplicata estiver `checked_in`, propagar status + `checked_in_at` para a mantida.
-  - Cancelar (`status='cancelled'`) as demais com nota em `tracking.merge_reason='duplicate_email_merged_<data>'`.
-- Total estimado: ~40 inscrições viram `cancelled`, mantendo o histórico (não deletamos).
-- Saída: aba **"Duplicatas Mescladas"** no Excel listando antes/depois.
+- Conferir que o envio usa o remetente correto (`Eventos Centerfrios <eventos@eventos.centerfrios.com>`) e o `reply_to` configurado nas duas funções (confirmação e fila de lembretes).
+- Atualizar a tag `event_slug` para o novo slug e validar que as tags são aceitas pelo Resend (só letras, números, `_` e `-`).
+- Rodar um envio de teste real de confirmação e de lembrete para um endereço de verificação, checando `email_send_log` (status `sent` → `delivered` pelo webhook) e conferindo que o QR Code renderiza (gerado pela função interna `qr-code`, sem dependência externa).
+- Verificar se o webhook do Resend está registrando `delivered`/`bounced` nas colunas de rastreio.
 
-### 3. Geração dos relatórios
+## 4. URL do evento
 
-**📊 Excel (`relatorio_circuito_experience.xlsx`)** com abas:
-1. **Resumo Executivo** — KPIs (total, check-ins, taxa, duplicatas, e-mails enviados/falhados).
-2. **Inscritos** — todos os 277, ordenados por data, com status atual e flag de duplicata.
-3. **Check-ins Realizados** — quem entrou, horário, dispositivo (se rastreado).
-4. **Pendentes** — inscritos sem check-in (lista para a recepção).
-5. **Duplicatas Mescladas** — auditoria da limpeza (item 2).
-6. **Erros Check-in** — análise do item 1.
-7. **Funil de Inscrição** — pageviews → form iniciado → abandono → conversão (de `event_page_views`).
-8. **Inscrições por Hora** — série temporal (BRT) para gráfico.
-9. **E-mails** — confirmações + lembretes (1d/2h): enviados, falhados, motivos.
+- Alterar o slug de `workshop-v-cuo-em-a-o-j4maq9` para `vacuo_em_acao`, deixando a página pública em `https://eventos.centerfrios.com/register/vacuo_em_acao`.
+- Melhorar o gerador de slug para transliterar acentos (á→a, ç→c, ã→a) em vez de removê-los, evitando novos slugs quebrados como "v-cuo-em-a-o".
+- Como o evento está em rascunho e sem inscritos, não há links antigos a preservar; os e-mails futuros já sairão com a URL nova.
 
-**📄 PDF Executivo (`relatorio_circuito_experience.pdf`)** — 4-5 páginas:
-1. Capa + KPIs principais
-2. Funil de conversão (pageviews → inscritos → check-in) com gráfico
-3. Cronologia de inscrições + pico de tráfego
-4. Saúde dos e-mails (taxa de entrega, falhas)
-5. Achados da auditoria + recomendações para próximos eventos
+## Detalhes técnicos
 
-### 4. Validação
-
-- Após o merge: rodar `SELECT lower(lead_email), count(*) FROM registrations WHERE event_id=... AND status!='cancelled' GROUP BY 1 HAVING count(*)>1` ⇒ deve retornar zero.
-- Verificar que nenhum check-in foi perdido (count `checked_in` antes vs depois).
-- QA visual do PDF (página por página) e abertura do Excel.
-
----
-
-### Arquivos entregues
-
-- `/mnt/documents/relatorio_circuito_experience.xlsx`
-- `/mnt/documents/relatorio_circuito_experience.pdf`
-
-### Mudanças no banco
-
-- Apenas `UPDATE` em `registrations` para o merge (sem schema, sem deletes). Reversível pelo histórico em `tracking`.
-
-### Fora de escopo
-
-- Não mexer em RLS, edge functions ou estrutura de tabelas.
-- Não alterar configuração do evento (datas, capacidade).
-- Não enviar e-mails — só relatar.
+- Arquivos tocados: `src/pages/Register.tsx`, `src/pages/CheckIn.tsx`, `src/pages/CheckInRapido.tsx`, `src/pages/PrivacyPolicy.tsx`, novo `src/hooks/useEventFavicon.ts`, `supabase/functions/_shared/email-templates.ts`, `src/pages/dashboard/CreateEvent.tsx` (slugify).
+- Migração: `update events set slug = 'vacuo_em_acao', logo_url = <logo centerfrios>` para o evento `29157586…`.
+- Redeploy das funções `send-registration-confirmation`, `process-reminder-queue` e `render-email-preview` após a mudança nos templates.
