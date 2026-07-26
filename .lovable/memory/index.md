@@ -34,3 +34,4 @@
 - [Features bento](mem://features/landing-page-features-section) — 5xl bento-grid, DOM-based illustrations with dynamic accents
 - [Logo component](mem://tech/logo-component) — Centerfrios penguin logo PNG, standardized sm/md/lg size presets
 - [Bento color presets](mem://style/landing-page-bento-color-presets) — Playful, Neutral, and Vivid theme configurations
+- [MCP agent integrations](mem://features/mcp-integrations) — OAuth-protected MCP server, tools in src/lib/mcp, auto-generated mcp edge function
