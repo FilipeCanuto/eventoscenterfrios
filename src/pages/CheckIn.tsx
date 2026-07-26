@@ -5,6 +5,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { XCircle, Loader2, Clock } from "lucide-react";
 import { Logo } from "@/components/Logo";
 import confetti from "canvas-confetti";
+import { useEventFavicon } from "@/hooks/useEventFavicon";
 
 type CheckInResult = "success" | "already_checked_in" | "cancelled" | "not_found" | "outside_window" | "error";
 
@@ -18,6 +19,7 @@ const CheckIn = () => {
   const [loading, setLoading] = useState(true);
   const [result, setResult] = useState<CheckInResult>("error");
   const [meta, setMeta] = useState<RegMeta | null>(null);
+  useEventFavicon({ name: meta?.events?.name ?? null });
   const [windowStart, setWindowStart] = useState<string | null>(null);
   const ranRef = useRef(false);
 

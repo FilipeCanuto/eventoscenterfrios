@@ -7,6 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Logo } from "@/components/Logo";
 import { Loader2, XCircle, Clock, Mail, UserPlus } from "lucide-react";
 import confetti from "canvas-confetti";
+import { useEventFavicon } from "@/hooks/useEventFavicon";
 
 type Status =
   | "idle"
@@ -37,6 +38,7 @@ const CheckInRapido = () => {
   const [status, setStatus] = useState<Status>("idle");
   const [result, setResult] = useState<RpcResult | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  useEventFavicon({ name: result?.event_name ?? null });
 
   // Inscrição na hora
   const [regName, setRegName] = useState("");
