@@ -11,6 +11,10 @@ function qrUrl(checkInUrl: string, size: number) {
   return `${QR_BASE}?size=${size}&data=${encodeURIComponent(checkInUrl)}`;
 }
 
+// Logomarca institucional CENTERFRIOS (usada no topo de todos os e-mails).
+export const CENTERFRIOS_LOGO_URL =
+  "https://ahwecyjzzczcwunptxae.supabase.co/storage/v1/object/public/event-assets/brand%2Fcenterfrios-logo.png";
+
 export interface EventLike {
   name: string;
   event_date: string | null;
@@ -21,6 +25,19 @@ export interface EventLike {
   slug: string;
   primary_color: string | null;
   logo_url: string | null;
+  background_image_url?: string | null;
+}
+
+// Escolhe texto claro ou escuro conforme a luminância da cor de marca,
+// garantindo contraste legível também em tons dourados como #c2a02d.
+export function onBrandTextColor(hex?: string | null) {
+  const h = (hex || "").replace("#", "");
+  if (h.length !== 6) return "#ffffff";
+  const r = parseInt(h.slice(0, 2), 16);
+  const g = parseInt(h.slice(2, 4), 16);
+  const b = parseInt(h.slice(4, 6), 16);
+  const lum = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+  return lum > 0.62 ? "#1a1a1a" : "#ffffff";
 }
 
 export interface EmailContext {
