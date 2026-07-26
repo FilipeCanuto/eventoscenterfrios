@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { lovable } from "@/integrations/lovable/index";
 import { toast } from "sonner";
@@ -11,8 +11,20 @@ import { useAuth } from "@/contexts/AuthContext";
 import { Logo } from "@/components/Logo";
 import { motion } from "framer-motion";
 
+function safeNext(raw: string | null): string | null {
+  if (!raw) return null;
+  if (!raw.startsWith("/") || raw.startsWith("//")) return null;
+  return raw;
+}
+
 const Auth = () => {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const next = safeNext(searchParams.get("next"));
+  const redirectTarget = next ?? "/dashboard/events";
+  const oauthRedirect = next
+    ? `${window.location.origin}${next}`
+    : window.location.origin;
   const { user } = useAuth();
   const [loading, setLoading] = useState(false);
   const [loginEmail, setLoginEmail] = useState("");
@@ -22,8 +34,8 @@ const Auth = () => {
   const [signupPassword, setSignupPassword] = useState("");
 
   useEffect(() => {
-    if (user) navigate("/dashboard/events", { replace: true });
-  }, [user, navigate]);
+    if (user) navigate(redirectTarget, { replace: true });
+  }, [user, navigate, redirectTarget]);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -37,7 +49,7 @@ const Auth = () => {
       toast.error(error.message);
     } else {
       toast.success("Bem-vindo de volta!");
-      navigate("/dashboard/events");
+      navigate(redirectTarget);
     }
   };
 
@@ -49,7 +61,7 @@ const Auth = () => {
       password: signupPassword,
       options: {
         data: { full_name: signupName },
-        emailRedirectTo: window.location.origin,
+        emailRedirectTo: oauthRedirect,
       },
     });
     setLoading(false);
@@ -57,7 +69,7 @@ const Auth = () => {
       toast.error(error.message);
     } else {
       toast.success("Conta criada! Verifique seu e-mail para confirmar, ou você pode ser logado automaticamente.");
-      navigate("/dashboard/events");
+      navigate(redirectTarget);
     }
   };
 
