@@ -153,9 +153,19 @@ function shellHtml(opts: {
   origin: string;
   unsubscribeToken?: string | null;
   logoUrl?: string | null;
+  artUrl?: string | null;
 }) {
-  const logo = opts.logoUrl
-    ? `<img src="${escapeHtml(opts.logoUrl)}" alt="" height="40" style="display:block;margin:0 auto 12px;max-height:40px"/>`
+  const onBrand = onBrandTextColor(opts.brand);
+  const dim = onBrand === "#ffffff" ? "rgba(255,255,255,.85)" : "rgba(0,0,0,.6)";
+  // Faixa branca institucional com a logomarca CENTERFRIOS.
+  const brandBar = `<tr><td style="background:#ffffff;padding:20px 24px 16px;text-align:center">
+          <img src="${escapeHtml(opts.logoUrl || CENTERFRIOS_LOGO_URL)}" alt="CENTERFRIOS" height="34" style="display:block;margin:0 auto;max-height:34px;border:0"/>
+        </td></tr>`;
+  // Arte do evento (quando cadastrada), logo abaixo do cabeçalho colorido.
+  const art = opts.artUrl
+    ? `<tr><td style="padding:0;background:#ffffff">
+          <img src="${escapeHtml(opts.artUrl)}" alt="${escapeHtml(opts.eventName)}" width="560" style="display:block;width:100%;max-width:560px;height:auto;border:0"/>
+        </td></tr>`
     : "";
   return `<!doctype html>
 <html lang="pt-BR"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/><title>${escapeHtml(opts.eventName)}</title></head>
@@ -163,11 +173,12 @@ function shellHtml(opts: {
   <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f6f6f7;padding:32px 16px">
     <tr><td align="center">
       <table role="presentation" width="560" cellpadding="0" cellspacing="0" style="max-width:560px;width:100%;background:#ffffff;border-radius:20px;overflow:hidden;box-shadow:0 1px 2px rgba(0,0,0,0.04)">
-        <tr><td style="background:${opts.brand};padding:28px 24px;text-align:center;color:#fff">
-          ${logo}
-          <div style="font-size:13px;letter-spacing:.08em;text-transform:uppercase;opacity:.9">${escapeHtml(opts.badge)}</div>
-          <div style="font-size:22px;font-weight:700;margin-top:6px;line-height:1.25">${escapeHtml(opts.eventName)}</div>
+        ${brandBar}
+        <tr><td style="background:${opts.brand};padding:22px 24px;text-align:center;color:${onBrand}">
+          <div style="font-size:13px;letter-spacing:.08em;text-transform:uppercase;color:${dim}">${escapeHtml(opts.badge)}</div>
+          <div style="font-size:22px;font-weight:700;margin-top:6px;line-height:1.25;color:${onBrand}">${escapeHtml(opts.eventName)}</div>
         </td></tr>
+        ${art}
         <tr><td style="padding:28px 28px 8px">${opts.body}</td></tr>
         <tr><td style="padding:24px 28px 28px;text-align:center;color:#9ca3af;font-size:12px">
           Você está recebendo este e-mail porque se inscreveu em <strong style="color:#6b7280">${escapeHtml(opts.eventName)}</strong>.<br/>
