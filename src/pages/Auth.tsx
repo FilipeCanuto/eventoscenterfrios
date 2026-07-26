@@ -153,7 +153,7 @@ const Auth = () => {
                 variant="outline"
                 className="w-full mt-5 rounded-full h-11 border-input hover:bg-muted font-medium"
                 onClick={async () => {
-                  const { error } = await lovable.auth.signInWithOAuth("google", { redirect_uri: window.location.origin });
+                  const { error } = await lovable.auth.signInWithOAuth("google", { redirect_uri: oauthRedirect });
                   if (error) toast.error(error.message || "Falha ao entrar com Google");
                 }}
               >
@@ -218,7 +218,7 @@ const Auth = () => {
                 variant="outline"
                 className="w-full mt-5 rounded-full h-11 border-input hover:bg-muted font-medium"
                 onClick={async () => {
-                  const { error } = await lovable.auth.signInWithOAuth("google", { redirect_uri: window.location.origin });
+                  const { error } = await lovable.auth.signInWithOAuth("google", { redirect_uri: oauthRedirect });
                   if (error) toast.error(error.message || "Falha ao entrar com Google");
                 }}
               >
