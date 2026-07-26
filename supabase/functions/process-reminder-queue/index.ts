@@ -164,7 +164,7 @@ serve(async (req) => {
         const { data: reg } = await supabase
           .from("registrations")
           .select(`id, status, lead_email, lead_name,
-            events ( name, event_date, event_end_date, timezone, location_type, location_value, slug, primary_color, logo_url )`)
+            events ( name, event_date, event_end_date, timezone, location_type, location_value, slug, primary_color, logo_url, background_image_url )`)
           .eq("id", item.registration_id)
           .maybeSingle();
 

@@ -47,7 +47,13 @@ export function useEventBySlug(slug: string | undefined) {
 }
 
 function generateSlug(name: string): string {
-  return name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "") + "-" + Math.random().toString(36).substring(2, 8);
+  const base = name
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "") // remove acentos: á→a, ç→c, ã→a
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/(^-|-$)/g, "");
+  return `${base}-${Math.random().toString(36).substring(2, 8)}`;
 }
 
 export function useCreateEvent() {

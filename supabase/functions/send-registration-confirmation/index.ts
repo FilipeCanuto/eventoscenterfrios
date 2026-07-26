@@ -106,7 +106,7 @@ serve(async (req) => {
       .select(`
         id, status, lead_email, lead_name, tracking, event_id,
         events ( id, name, event_date, event_end_date, timezone,
-                 location_type, location_value, slug, primary_color, logo_url )
+                 location_type, location_value, slug, primary_color, logo_url, background_image_url )
       `)
       .eq("id", body.registrationId)
       .maybeSingle();

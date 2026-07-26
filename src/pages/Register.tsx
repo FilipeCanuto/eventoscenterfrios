@@ -10,6 +10,7 @@ import { Label } from "@/components/ui/label";
 // Radix Select removido propositalmente: o fluxo público usa <select> nativo
 // em todos os dispositivos para evitar crashes de Portal/hydration em
 // in-app browsers (WhatsApp/Instagram), Android WebView e Google Translate.
+import { useEventFavicon } from "@/hooks/useEventFavicon";
 import { useParams, useSearchParams } from "react-router-dom";
 import { CalendarDays, MapPin, Video, Globe, Loader2, Zap, Mail, QrCode, Clock, MessageCircle, Copy, Check, CheckCircle2 } from "lucide-react";
 import { useEventBySlug, Event } from "@/hooks/useEvents";
@@ -827,22 +828,8 @@ const Register = () => {
     trackPageView(event.id, payload);
   }, [event?.id]);
 
-  // Ensure favicon is the circuito icon on the registration + success pages
-  useEffect(() => {
-    let link = document.querySelector<HTMLLinkElement>("link[rel~='icon']");
-    const created = !link;
-    if (!link) {
-      link = document.createElement("link");
-      link.rel = "icon";
-      document.head.appendChild(link);
-    }
-    const previous = link.href;
-    link.href = "/favicon-circuito.png";
-    return () => {
-      if (created) link!.remove();
-      else link!.href = previous;
-    };
-  }, []);
+  // Favicon específico do evento (fallback: ícone institucional)
+  useEventFavicon(event);
 
   useEffect(() => {
     if (!event) return;

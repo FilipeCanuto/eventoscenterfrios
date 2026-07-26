@@ -58,7 +58,7 @@ serve(async (req) => {
       .from("registrations")
       .select(`id, lead_name, lead_email, event_id,
         events ( id, name, event_date, event_end_date, timezone, location_type,
-                 location_value, slug, primary_color, logo_url, user_id )`)
+                 location_value, slug, primary_color, logo_url, background_image_url, user_id )`)
       .eq("id", body.registrationId).maybeSingle();
 
     if (!reg) {

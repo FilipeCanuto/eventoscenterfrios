@@ -11,6 +11,10 @@ function qrUrl(checkInUrl: string, size: number) {
   return `${QR_BASE}?size=${size}&data=${encodeURIComponent(checkInUrl)}`;
 }
 
+// Logomarca institucional CENTERFRIOS (usada no topo de todos os e-mails).
+export const CENTERFRIOS_LOGO_URL =
+  "https://ahwecyjzzczcwunptxae.supabase.co/storage/v1/object/public/event-assets/brand%2Fcenterfrios-logo.png";
+
 export interface EventLike {
   name: string;
   event_date: string | null;
@@ -21,6 +25,19 @@ export interface EventLike {
   slug: string;
   primary_color: string | null;
   logo_url: string | null;
+  background_image_url?: string | null;
+}
+
+// Escolhe texto claro ou escuro conforme a luminância da cor de marca,
+// garantindo contraste legível também em tons dourados como #c2a02d.
+export function onBrandTextColor(hex?: string | null) {
+  const h = (hex || "").replace("#", "");
+  if (h.length !== 6) return "#ffffff";
+  const r = parseInt(h.slice(0, 2), 16);
+  const g = parseInt(h.slice(2, 4), 16);
+  const b = parseInt(h.slice(4, 6), 16);
+  const lum = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+  return lum > 0.62 ? "#1a1a1a" : "#ffffff";
 }
 
 export interface EmailContext {
@@ -136,9 +153,19 @@ function shellHtml(opts: {
   origin: string;
   unsubscribeToken?: string | null;
   logoUrl?: string | null;
+  artUrl?: string | null;
 }) {
-  const logo = opts.logoUrl
-    ? `<img src="${escapeHtml(opts.logoUrl)}" alt="" height="40" style="display:block;margin:0 auto 12px;max-height:40px"/>`
+  const onBrand = onBrandTextColor(opts.brand);
+  const dim = onBrand === "#ffffff" ? "rgba(255,255,255,.85)" : "rgba(0,0,0,.6)";
+  // Faixa branca institucional com a logomarca CENTERFRIOS.
+  const brandBar = `<tr><td style="background:#ffffff;padding:20px 24px 16px;text-align:center">
+          <img src="${escapeHtml(opts.logoUrl || CENTERFRIOS_LOGO_URL)}" alt="CENTERFRIOS" height="34" style="display:block;margin:0 auto;max-height:34px;border:0"/>
+        </td></tr>`;
+  // Arte do evento (quando cadastrada), logo abaixo do cabeçalho colorido.
+  const art = opts.artUrl
+    ? `<tr><td style="padding:0;background:#ffffff">
+          <img src="${escapeHtml(opts.artUrl)}" alt="${escapeHtml(opts.eventName)}" width="560" style="display:block;width:100%;max-width:560px;height:auto;border:0"/>
+        </td></tr>`
     : "";
   return `<!doctype html>
 <html lang="pt-BR"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/><title>${escapeHtml(opts.eventName)}</title></head>
@@ -146,11 +173,12 @@ function shellHtml(opts: {
   <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f6f6f7;padding:32px 16px">
     <tr><td align="center">
       <table role="presentation" width="560" cellpadding="0" cellspacing="0" style="max-width:560px;width:100%;background:#ffffff;border-radius:20px;overflow:hidden;box-shadow:0 1px 2px rgba(0,0,0,0.04)">
-        <tr><td style="background:${opts.brand};padding:28px 24px;text-align:center;color:#fff">
-          ${logo}
-          <div style="font-size:13px;letter-spacing:.08em;text-transform:uppercase;opacity:.9">${escapeHtml(opts.badge)}</div>
-          <div style="font-size:22px;font-weight:700;margin-top:6px;line-height:1.25">${escapeHtml(opts.eventName)}</div>
+        ${brandBar}
+        <tr><td style="background:${opts.brand};padding:22px 24px;text-align:center;color:${onBrand}">
+          <div style="font-size:13px;letter-spacing:.08em;text-transform:uppercase;color:${dim}">${escapeHtml(opts.badge)}</div>
+          <div style="font-size:22px;font-weight:700;margin-top:6px;line-height:1.25;color:${onBrand}">${escapeHtml(opts.eventName)}</div>
         </td></tr>
+        ${art}
         <tr><td style="padding:28px 28px 8px">${opts.body}</td></tr>
         <tr><td style="padding:24px 28px 28px;text-align:center;color:#9ca3af;font-size:12px">
           Você está recebendo este e-mail porque se inscreveu em <strong style="color:#6b7280">${escapeHtml(opts.eventName)}</strong>.<br/>
@@ -193,7 +221,7 @@ function ctaButtons(eventUrl: string, gcalUrl: string | null, brand: string) {
     ? `<a href="${gcalUrl}" style="display:inline-block;background:#ffffff;color:#111;text-decoration:none;font-weight:600;padding:13px 22px;border-radius:999px;font-size:14px;border:1px solid #e5e7eb;margin:6px">📅 Adicionar à agenda</a>`
     : "";
   return `<div style="text-align:center;margin:20px 0 8px">
-    <a href="${eventUrl}" style="display:inline-block;background:${brand};color:#fff;text-decoration:none;font-weight:600;padding:14px 26px;border-radius:999px;font-size:15px;margin:6px">Ver página do evento</a>
+    <a href="${eventUrl}" style="display:inline-block;background:${brand};color:${onBrandTextColor(brand)};text-decoration:none;font-weight:600;padding:14px 26px;border-radius:999px;font-size:15px;margin:6px">Ver página do evento</a>
     ${gcal}
   </div>`;
 }
@@ -213,7 +241,7 @@ export function buildConfirmation(ctx: EmailContext) {
   const greeting = safeName ? `Olá, ${safeName}!` : "Olá!";
   const eventUrl = `${ctx.origin}/register/${encodeURIComponent(ev.slug)}`;
   const checkInUrl = `${ctx.origin}/check-in/${ctx.registrationId}`;
-  const qrSrc = `https://api.qrserver.com/v1/create-qr-code/?size=240x240&margin=2&data=${encodeURIComponent(checkInUrl)}`;
+  const qrSrc = qrUrl(checkInUrl, 240);
   const gcal = googleCalendarUrl(ev, eventUrl);
 
   const body = `
@@ -230,7 +258,7 @@ export function buildConfirmation(ctx: EmailContext) {
 
   const html = shellHtml({
     brand, eventName: ev.name, badge: "Inscrição confirmada",
-    body, origin: ctx.origin, unsubscribeToken: null, logoUrl: ev.logo_url,
+    body, origin: ctx.origin, unsubscribeToken: null, logoUrl: ev.logo_url, artUrl: ev.background_image_url,
   });
 
   const loc = locationBlocks(ev, brand);
@@ -257,7 +285,7 @@ export function buildReminder7d(ctx: EmailContext) {
   const greeting = safeName ? `Olá, ${safeName}!` : "Olá!";
   const eventUrl = `${ctx.origin}/register/${encodeURIComponent(ev.slug)}`;
   const checkInUrl = `${ctx.origin}/check-in/${ctx.registrationId}`;
-  const qrSrc = `https://api.qrserver.com/v1/create-qr-code/?size=160x160&margin=2&data=${encodeURIComponent(checkInUrl)}`;
+  const qrSrc = qrUrl(checkInUrl, 160);
   const gcal = googleCalendarUrl(ev, eventUrl);
 
   const body = `
@@ -274,7 +302,7 @@ export function buildReminder7d(ctx: EmailContext) {
 
   const html = shellHtml({
     brand, eventName: ev.name, badge: "Faltam 7 dias",
-    body, origin: ctx.origin, unsubscribeToken: ctx.unsubscribeToken, logoUrl: ev.logo_url,
+    body, origin: ctx.origin, unsubscribeToken: ctx.unsubscribeToken, logoUrl: ev.logo_url, artUrl: ev.background_image_url,
   });
 
   const loc = locationBlocks(ev, brand);
@@ -301,12 +329,12 @@ export function buildReminder1d(ctx: EmailContext) {
   const greeting = safeName ? `Olá, ${safeName}!` : "Olá!";
   const eventUrl = `${ctx.origin}/register/${encodeURIComponent(ev.slug)}`;
   const checkInUrl = `${ctx.origin}/check-in/${ctx.registrationId}`;
-  const qrSrc = `https://api.qrserver.com/v1/create-qr-code/?size=220x220&margin=2&data=${encodeURIComponent(checkInUrl)}`;
+  const qrSrc = qrUrl(checkInUrl, 220);
   const gcal = googleCalendarUrl(ev, eventUrl);
   const hours = hoursUntil(ev.event_date, ctx.referenceDate);
 
   const countdown = hours !== null ? `
-    <div style="background:${brand};color:#fff;border-radius:14px;padding:22px;margin:0 0 20px;text-align:center">
+    <div style="background:${brand};color:${onBrandTextColor(brand)};border-radius:14px;padding:22px;margin:0 0 20px;text-align:center">
       <div style="font-size:12px;letter-spacing:.08em;text-transform:uppercase;opacity:.9">Faltam</div>
       <div style="font-size:42px;font-weight:800;line-height:1;margin:6px 0">${hours}h</div>
       <div style="font-size:13px;opacity:.9">para o evento começar</div>
@@ -324,7 +352,7 @@ export function buildReminder1d(ctx: EmailContext) {
 
   const html = shellHtml({
     brand, eventName: ev.name, badge: "Amanhã é o dia",
-    body, origin: ctx.origin, unsubscribeToken: ctx.unsubscribeToken, logoUrl: ev.logo_url,
+    body, origin: ctx.origin, unsubscribeToken: ctx.unsubscribeToken, logoUrl: ev.logo_url, artUrl: ev.background_image_url,
   });
 
   const loc = locationBlocks(ev, brand);
@@ -351,7 +379,7 @@ export function buildReminder2h(ctx: EmailContext) {
   const greeting = safeName ? `Olá, ${safeName}!` : "Olá!";
   const eventUrl = `${ctx.origin}/register/${encodeURIComponent(ev.slug)}`;
   const checkInUrl = `${ctx.origin}/check-in/${ctx.registrationId}`;
-  const qrSrc = `https://api.qrserver.com/v1/create-qr-code/?size=320x320&margin=2&data=${encodeURIComponent(checkInUrl)}`;
+  const qrSrc = qrUrl(checkInUrl, 320);
   const loc = locationBlocks(ev, brand);
 
   const body = `
@@ -370,7 +398,7 @@ export function buildReminder2h(ctx: EmailContext) {
 
   const html = shellHtml({
     brand, eventName: ev.name, badge: "Começa em 2 horas",
-    body, origin: ctx.origin, unsubscribeToken: ctx.unsubscribeToken, logoUrl: ev.logo_url,
+    body, origin: ctx.origin, unsubscribeToken: ctx.unsubscribeToken, logoUrl: ev.logo_url, artUrl: ev.background_image_url,
   });
 
   const text = [
