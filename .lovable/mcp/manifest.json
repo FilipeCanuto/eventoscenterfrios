@@ -1,0 +1,148 @@
+{
+  "version": 1,
+  "sdk_version": "0.24.0",
+  "path": "/functions/v1/mcp",
+  "auth": {
+    "type": "oauth",
+    "issuer": "https://ahwecyjzzczcwunptxae.supabase.co/auth/v1",
+    "accepted_audiences": [
+      "authenticated"
+    ]
+  },
+  "mcp": {
+    "server": {
+      "name": "centerfrios-eventos-mcp",
+      "version": "0.1.0",
+      "title": "Centerfrios Eventos"
+    },
+    "tools": [
+      {
+        "name": "list_events",
+        "title": "Listar eventos",
+        "description": "Lista os eventos visíveis para o usuário conectado, com data, status, local e limite de inscrições.",
+        "annotations": {
+          "readOnlyHint": true,
+          "idempotentHint": true,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "status": {
+              "type": "string",
+              "enum": [
+                "draft",
+                "published",
+                "closed"
+              ],
+              "description": "Filtra por status do evento."
+            },
+            "search": {
+              "type": "string",
+              "description": "Busca por parte do nome do evento."
+            },
+            "limit": {
+              "type": "integer",
+              "description": "Máximo de eventos (padrão 25)."
+            }
+          },
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "get_event_stats",
+        "title": "Estatísticas do evento",
+        "description": "Retorna o resumo de um evento: total de inscrições, presentes (check-in), pendentes e cancelados.",
+        "annotations": {
+          "readOnlyHint": true,
+          "idempotentHint": true,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "event_id": {
+              "type": "string",
+              "description": "ID (uuid) do evento."
+            }
+          },
+          "required": [
+            "event_id"
+          ],
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "list_registrations",
+        "title": "Listar inscritos",
+        "description": "Lista os inscritos de um evento com nome, e-mail, WhatsApp, status e horário de check-in. Permite buscar por nome/e-mail/telefone.",
+        "annotations": {
+          "readOnlyHint": true,
+          "idempotentHint": true,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "event_id": {
+              "type": "string",
+              "description": "ID (uuid) do evento."
+            },
+            "search": {
+              "type": "string",
+              "description": "Busca por nome, e-mail ou WhatsApp."
+            },
+            "status": {
+              "type": "string",
+              "description": "Filtra pelo status da inscrição (ex.: pending, attended, cancelled)."
+            },
+            "checked_in": {
+              "type": "boolean",
+              "description": "true = apenas quem fez check-in; false = apenas quem ainda não fez."
+            },
+            "limit": {
+              "type": "integer",
+              "description": "Máximo de inscritos (padrão 50, máximo 200)."
+            }
+          },
+          "required": [
+            "event_id"
+          ],
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "check_in_registration",
+        "title": "Fazer check-in de inscrito",
+        "description": "Registra o check-in (presença) de um inscrito pelo ID da inscrição. Se já houver check-in, informa o horário existente.",
+        "annotations": {
+          "readOnlyHint": false,
+          "destructiveHint": false,
+          "idempotentHint": true,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "registration_id": {
+              "type": "string",
+              "description": "ID (uuid) da inscrição."
+            }
+          },
+          "required": [
+            "registration_id"
+          ],
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        },
+        "outputSchema": null
+      }
+    ]
+  }
+}

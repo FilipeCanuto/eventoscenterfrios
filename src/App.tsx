@@ -23,6 +23,7 @@ const CheckIn = lazy(() => import("./pages/CheckIn"));
 const CheckInRapido = lazy(() => import("./pages/CheckInRapido"));
 const UnsubscribeReminders = lazy(() => import("./pages/UnsubscribeReminders"));
 const PrivacyPolicy = lazy(() => import("./pages/PrivacyPolicy"));
+const OAuthConsent = lazy(() => import("./pages/OAuthConsent"));
 const Events = lazy(() => import("./pages/dashboard/Events"));
 const CreateEvent = lazy(() => import("./pages/dashboard/CreateEvent"));
 const EventDetail = lazy(() => import("./pages/dashboard/EventDetail"));
@@ -70,6 +71,7 @@ const App = () => (
                 <Route path="/unsubscribe-reminders/:token" element={<UnsubscribeReminders />} />
                 <Route path="/company/:companySlug" element={<CompanyPage />} />
                 <Route path="/privacidade" element={<PrivacyPolicy />} />
+                <Route path="/.lovable/oauth/consent" element={<OAuthConsent />} />
 
                 {/* Dashboard (protected) */}
                 <Route path="/dashboard" element={<Navigate to="/dashboard/events" replace />} />
