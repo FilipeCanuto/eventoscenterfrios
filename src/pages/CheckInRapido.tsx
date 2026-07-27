@@ -145,6 +145,15 @@ const CheckInRapido = () => {
         return;
       }
 
+      // Planilha (Make): inscrição feita na recepção/vendedor
+      void enviarParaGoogleSheets({
+        nome: cleanName,
+        whatsapp: cleanWhats,
+        email: cleanEmail,
+        segmento: "",
+        vendedor: new URLSearchParams(window.location.search).get("vendedor") || "Recepção/Vendedor",
+      });
+
       // Inscrição feita; faz check-in encadeado
       const { data, error } = await supabase.rpc("public_check_in_by_email" as never, {
         p_email: cleanEmail,
