@@ -3,28 +3,32 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Copy, Check, Share2, ExternalLink } from "lucide-react";
 import { toast } from "sonner";
+import { PUBLIC_ORIGIN } from "@/lib/utils";
+
 
 interface Props {
   slug: string;
   eventName: string;
 }
 
-const PRESETS: { key: string; label: string; params: Record<string, string> }[] = [
-  { key: "direto", label: "Link direto", params: {} },
-  { key: "instagram", label: "Instagram", params: { utm_source: "instagram", utm_medium: "bio", utm_campaign: "evento" } },
-  { key: "whatsapp", label: "WhatsApp", params: { utm_source: "whatsapp", utm_medium: "mensagem", utm_campaign: "evento" } },
-  { key: "landing", label: "Landing page", params: { utm_source: "landing", utm_medium: "botao-cta", utm_campaign: "evento" } },
+const PRESETS: { key: string; label: string; params: (campaign: string) => Record<string, string> }[] = [
+  { key: "direto", label: "Link direto", params: () => ({}) },
+  { key: "instagram", label: "Instagram", params: c => ({ utm_source: "instagram", utm_medium: "bio", utm_campaign: c }) },
+  { key: "whatsapp", label: "WhatsApp", params: c => ({ utm_source: "whatsapp", utm_medium: "mensagem", utm_campaign: c }) },
+  { key: "landing", label: "Landing page", params: c => ({ utm_source: "landing", utm_medium: "botao-cta", utm_campaign: c }) },
 ];
 
 export default function RegistrationLinkBlock({ slug, eventName }: Props) {
   const [active, setActive] = useState("direto");
   const [copied, setCopied] = useState(false);
 
-  const baseUrl = `${window.location.origin}/register/${slug}`;
+  const baseUrl = `${PUBLIC_ORIGIN}/register/${slug}`;
   const preset = PRESETS.find(p => p.key === active) || PRESETS[0];
-  const url = Object.keys(preset.params).length
-    ? `${baseUrl}?${new URLSearchParams(preset.params).toString()}`
+  const params = preset.params(slug);
+  const url = Object.keys(params).length
+    ? `${baseUrl}?${new URLSearchParams(params).toString()}`
     : baseUrl;
+
 
   const handleCopy = async () => {
     try {
