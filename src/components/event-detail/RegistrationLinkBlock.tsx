@@ -22,7 +22,7 @@ export default function RegistrationLinkBlock({ slug, eventName }: Props) {
   const [active, setActive] = useState("direto");
   const [copied, setCopied] = useState(false);
 
-  const baseUrl = `${window.location.origin}/register/${slug}`;
+  const baseUrl = `${PUBLIC_ORIGIN}/register/${slug}`;
   const preset = PRESETS.find(p => p.key === active) || PRESETS[0];
   const url = Object.keys(preset.params).length
     ? `${baseUrl}?${new URLSearchParams(preset.params).toString()}`
