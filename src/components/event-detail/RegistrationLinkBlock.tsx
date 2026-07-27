@@ -3,6 +3,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Copy, Check, Share2, ExternalLink } from "lucide-react";
 import { toast } from "sonner";
+import { PUBLIC_ORIGIN } from "@/lib/utils";
+
 
 interface Props {
   slug: string;
