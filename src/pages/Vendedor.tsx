@@ -77,6 +77,7 @@ const emptyForm = { nome: "", whatsapp: "", email: "", segmento: "" };
 
 export default function Vendedor() {
   const [vendedor, setVendedor] = useState<string | null>(null);
+  useEventFavicon({ slug: EVENT_SLUG });
   const [escolha, setEscolha] = useState("");
   const [total, setTotal] = useState(0);
   const [form, setForm] = useState(emptyForm);
