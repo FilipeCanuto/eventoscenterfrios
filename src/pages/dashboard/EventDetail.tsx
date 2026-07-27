@@ -19,6 +19,7 @@ import EventQRCode from "@/components/event-detail/EventQRCode";
 import RegistrationLinkBlock from "@/components/event-detail/RegistrationLinkBlock";
 import EventLeadsTable from "@/components/event-detail/EventLeadsTable";
 import EventEmailAudit from "@/components/event-detail/EventEmailAudit";
+import { useEventFavicon } from "@/hooks/useEventFavicon";
 
 const EventDetail = () => {
   const { id } = useParams();
