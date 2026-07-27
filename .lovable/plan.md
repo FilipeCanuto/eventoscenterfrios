@@ -1,37 +1,33 @@
-## Objetivo
+## Situação
 
-Deixar o compartilhamento do link do Workshop Vácuo em Ação com um card escuro, premium e correto no WhatsApp, Telegram, LinkedIn e X — e fazer os links de campanha apontarem para o domínio publicado, não para o preview.
+A lista com os 14 nomes (Euclides, Maria, Clara, Neide, Clarice, Carla, Ricardo, Jackelline, Filipe, Willames, Rafaela, Rosângela, Humberto, Júlio) **já está no código** em `src/pages/Vendedor.tsx`. Os nomes antigos (João, Maria, Pedro, Ana, Carlos, Juliana, Outro…) que você vê são a versão **publicada** — o site em produção ainda está com o código anterior. Por isso o primeiro passo é publicar.
 
-## 1. Imagem de compartilhamento (1200x630)
+Hoje o formulário de `/vendedor` envia os dados **apenas para o webhook do Make** (planilha). Nada é gravado no banco do app, então não existe base para o painel/ranking. Isso será corrigido.
 
-Gerar `public/og-vacuo-em-acao.png` no estilo Dark Industrial Premium:
+## O que será feito
 
-- Fundo grafite `#12151C` com iluminação sutil azul-marinho `#0B2341` e dourada `#E6B012`.
-- Esquerda: badge dourado "EVENTO PRESENCIAL | MACEIÓ-AL", título "WORKSHOP VÁCUO EM AÇÃO" (branco + dourado), subtítulo "Engenharia de Alimentos + Embalagens + Test Drive de Máquinas" e, no rodapé, as marcas CENTERFRIOS "Crescendo com você" + R BAIÃO.
-- Direita: seladora a vácuo em bancada de aço inox, com produto selado a vácuo em destaque.
-- Composição montada em script (fundo + tipografia com fontes reais + arte gerada), com QA visual da imagem final antes de entregar: nada cortado, nada sobreposto, margens respeitadas.
+**1. Publicar**
+Publicar o app para que `https://eventos.centerfrios.com/vendedor` passe a mostrar a lista correta de colaboradores. Esse é o link público a compartilhar com a equipe:
+`https://eventos.centerfrios.com/vendedor`
 
-Se você tiver a logo oficial da R Baião e uma foto real da seladora, elas entram no lugar dos elementos gerados — é o que deixa o card 100% fiel.
+**2. Gravar as inscrições no banco**
+Ao enviar o formulário em `/vendedor`, além do webhook do Make, a inscrição será gravada no evento ativo (Workshop Vácuo em Ação) via a função de inscrição já existente, marcando o vendedor no campo de rastreamento. Assim os cadastros aparecem no painel interno, nos relatórios e recebem e-mail de confirmação como qualquer inscrição.
 
-## 2. Meta tags no `<head>`
+- O nome do vendedor vai gravado em `tracking.vendedor` (mais `origem: "vendedor"`).
+- Se o WhatsApp já existir no evento, mostra aviso claro de duplicado sem quebrar o fluxo (o envio ao Make continua acontecendo).
 
-O site é uma SPA estática: os robôs de preview (WhatsApp, Telegram, LinkedIn) leem **apenas** o `index.html`, não as tags injetadas por rota. Então as tags do evento vão no `index.html`, que hoje mostra "Centerfrios — Crescendo com você" e uma og:image antiga do Lovable.
+**3. Painel do colaborador (aba "Meu painel" em /vendedor)**
+Uma nova função pública somente-leitura no banco retorna, sem expor dados pessoais de outros vendedores:
+- Total de cadastros do colaborador (hoje e geral)
+- Lista dos clientes que ele cadastrou (nome, segmento, horário, status de check-in)
+- Ranking da equipe: apenas nome do colaborador + total de cadastros
 
-Ajuste em relação ao texto enviado: **og:image e twitter:image precisam de URL absoluta** (`https://eventos.centerfrios.com/og-vacuo-em-acao.png`) — caminho relativo não é resolvido pelos crawlers. O resto fica exatamente como você definiu:
-
-- `og:type` website, `og:title` "Workshop Vácuo em Ação | CENTERFRIOS & R Baião", `og:description` conforme enviado, `og:image:width` 1200, `og:image:height` 630, `og:url` e `canonical` apontando para `https://eventos.centerfrios.com/register/vacuo_em_acao`.
-- `twitter:card` summary_large_image + title/description/image conforme enviado.
-- `<title>` e `meta description` do documento alinhados ao evento.
-- Remover as og/twitter images antigas do Google Storage para não haver ambiguidade.
-
-Também adiciono JSON-LD de `Event` (nome, datas 19–20/08/2026, local Showroom CENTERFRIOS Tabuleiro, organizador) — isso melhora a leitura por buscadores e agentes de IA.
-
-## 3. Links de campanha (UTMs) no domínio publicado
-
-O bloco "Link público de inscrição" monta a URL com `window.location.origin`, por isso está gerando `https://id-preview--...lovable.app/register/...`. Vou fixar o domínio público (`https://eventos.centerfrios.com`) como base dos links copiados/compartilhados, mantendo o preview apenas quando não houver domínio publicado. Assim os presets Instagram / WhatsApp / Landing page saem com UTMs já no domínio final.
+**4. Identidade visual do evento**
+O painel e o formulário recebem o visual do Workshop Vácuo em Ação: fundo grafite escuro (#12151C), destaques em dourado (#E6B012) e azul marinho (#0B2341), logo/artwork do evento no topo, cartões de KPI limpos, ranking com destaque para o 1º lugar, tudo mobile-first (o time vai usar no celular).
 
 ## Detalhes técnicos
 
-- Arquivos: `index.html`, `src/components/event-detail/RegistrationLinkBlock.tsx`, novo `public/og-vacuo-em-acao.png`, e uma constante de origem pública em `src/lib/utils.ts`.
-- A imagem fica em `public/` (não em assets CDN) porque o crawler precisa dela em URL previsível no domínio do site.
-- Após publicar, os previews antigos ficam em cache nas plataformas; validar/forçar atualização no depurador de links do Facebook e no LinkedIn Post Inspector. O WhatsApp costuma atualizar sozinho em algumas horas.
+- Migração: função `public_vendedor_stats(p_vendedor text, p_event_id uuid)` — SECURITY DEFINER, STABLE, retorna JSON com `meus_totais`, `meus_cadastros` e `ranking` (só nome + contagem, sem PII de terceiros); leitura restrita a eventos com status `live`.
+- `Vendedor.tsx`: chamada a `register_for_event` com `p_tracking = { vendedor, origem: 'vendedor' }` antes do `enviarParaGoogleSheets`, tratamento de erros de duplicidade, reset imediato e contador incrementado a partir do retorno do banco (não mais só do localStorage).
+- Novo componente `src/components/vendedor/VendedorDashboard.tsx` + tokens de tema do evento aplicados localmente na rota (sem alterar o tema global do app).
+- A rota `/vendedor` continua pública (sem login) — a identificação é por seleção de nome, como já funciona.
