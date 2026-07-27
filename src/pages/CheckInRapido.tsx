@@ -8,6 +8,7 @@ import { Logo } from "@/components/Logo";
 import { Loader2, XCircle, Clock, Mail, UserPlus } from "lucide-react";
 import confetti from "canvas-confetti";
 import { useEventFavicon } from "@/hooks/useEventFavicon";
+import { enviarParaGoogleSheets } from "@/lib/makeWebhook";
 
 type Status =
   | "idle"
