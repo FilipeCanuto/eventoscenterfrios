@@ -13,7 +13,22 @@ import {
 } from "@/components/ui/select";
 import { enviarParaGoogleSheets } from "@/lib/makeWebhook";
 
-const VENDEDORES = ["João", "Maria", "Pedro", "Ana", "Carlos", "Juliana"];
+const VENDEDORES = [
+  "Euclides",
+  "Maria",
+  "Clara",
+  "Neide",
+  "Clarice",
+  "Carla",
+  "Ricardo",
+  "Jackelline",
+  "Filipe",
+  "Willames",
+  "Rafaela",
+  "Rosângela",
+  "Humberto",
+  "Júlio",
+];
 
 const SEGMENTOS = [
   "Restaurante",
