@@ -14,6 +14,7 @@ import {
 import { enviarParaGoogleSheets } from "@/lib/makeWebhook";
 import { supabase } from "@/integrations/supabase/client";
 import VendedorDashboard from "@/components/vendedor/VendedorDashboard";
+import { useEventFavicon } from "@/hooks/useEventFavicon";
 
 const VENDEDORES = [
   "Carla",
