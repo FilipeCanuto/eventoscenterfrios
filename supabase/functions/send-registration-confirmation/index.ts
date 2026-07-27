@@ -245,9 +245,22 @@ serve(async (req) => {
               registration_id: reg.id,
               email_type: "confirmation",
               recipient_email: recipientEmail,
-              status: "skipped",
+              status: "sent",
               error_message: "dedupe_recipient_event",
             });
+            // Marca no registro para o painel não exibir "Nunca tentado"
+            try {
+              await supabase
+                .from("registrations")
+                .update({
+                  tracking: {
+                    ...((reg.tracking as Record<string, unknown>) || {}),
+                    confirmation_email_sent_at: new Date().toISOString(),
+                    confirmation_email_dedupe: true,
+                  },
+                })
+                .eq("id", reg.id);
+            } catch (_) { /* noop */ }
             return new Response(
               JSON.stringify({ ok: true, alreadySent: true, dedupe: "recipient_event" }),
               { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },

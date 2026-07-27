@@ -34,7 +34,7 @@ export function useEventEmailAudit(eventId: string | null | undefined) {
     queryFn: async (): Promise<AuditSummary> => {
       const { data: regs, error: regsErr } = await supabase
         .from("registrations")
-        .select("id, lead_name, lead_email, lead_whatsapp, created_at, status")
+        .select("id, lead_name, lead_email, lead_whatsapp, created_at, status, tracking")
         .eq("event_id", eventId!)
         .neq("status", "cancelled")
         .order("created_at", { ascending: false })
@@ -79,8 +79,9 @@ export function useEventEmailAudit(eventId: string | null | undefined) {
       const rows: AuditRow[] = (regs || []).map((r: any) => {
         const email = (r.lead_email || "").trim().toLowerCase();
         const last = latestByReg.get(r.id);
+        const trackedSentAt = (r.tracking as any)?.confirmation_email_sent_at as string | undefined;
         let bucket: EmailBucket;
-        if (deliveredSet.has(r.id)) bucket = "delivered";
+        if (deliveredSet.has(r.id) || trackedSentAt) bucket = "delivered";
         else if (email && suppressedSet.has(email)) bucket = "suppressed";
         else if (last && last.status === "failed") bucket = "failed";
         else bucket = "never";
@@ -92,7 +93,7 @@ export function useEventEmailAudit(eventId: string | null | undefined) {
           lead_whatsapp: r.lead_whatsapp,
           created_at: r.created_at,
           bucket,
-          last_attempt_at: last?.created_at || null,
+          last_attempt_at: last?.created_at || trackedSentAt || null,
           last_error: last?.error_message || null,
         };
       });
