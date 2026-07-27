@@ -1,41 +1,37 @@
 ## Objetivo
 
-Preparar o evento **Workshop Vácuo em Ação** (hoje em rascunho, 19–20/08/2026, Showroom CENTERFRIOS Tabuleiro, cor `#c2a02d`) com identidade própria: favicon, e-mails branded e URL limpa.
+Deixar o compartilhamento do link do Workshop Vácuo em Ação com um card escuro, premium e correto no WhatsApp, Telegram, LinkedIn e X — e fazer os links de campanha apontarem para o domínio publicado, não para o preview.
 
-## 1. Favicon do evento
+## 1. Imagem de compartilhamento (1200x630)
 
-- Enviar a arte "Vácuo em Ação" para o CDN de assets e gerar uma versão quadrada otimizada para ícone (`favicon-vacuo.png`, 512px) em `public/`.
-- Hoje `Register.tsx` e `PrivacyPolicy.tsx` fixam `/favicon-circuito.png`. Trocar isso por um hook `useEventFavicon(event)` que escolhe o ícone conforme o evento carregado:
-  - evento Vácuo em Ação → `/favicon-vacuo.png`
-  - demais eventos → favicon atual do site
-- Aplicar nas páginas do evento: `/register/:slug`, tela de sucesso, `/check-in/:id` e `/checkin-rapido`. O restante do site continua com o ícone Centerfrios.
+Gerar `public/og-vacuo-em-acao.png` no estilo Dark Industrial Premium:
 
-## 2. E-mails do evento
+- Fundo grafite `#12151C` com iluminação sutil azul-marinho `#0B2341` e dourada `#E6B012`.
+- Esquerda: badge dourado "EVENTO PRESENCIAL | MACEIÓ-AL", título "WORKSHOP VÁCUO EM AÇÃO" (branco + dourado), subtítulo "Engenharia de Alimentos + Embalagens + Test Drive de Máquinas" e, no rodapé, as marcas CENTERFRIOS "Crescendo com você" + R BAIÃO.
+- Direita: seladora a vácuo em bancada de aço inox, com produto selado a vácuo em destaque.
+- Composição montada em script (fundo + tipografia com fontes reais + arte gerada), com QA visual da imagem final antes de entregar: nada cortado, nada sobreposto, margens respeitadas.
 
-Templates em `supabase/functions/_shared/email-templates.ts` (confirmação, 7 dias, 1 dia, 2 horas):
+Se você tiver a logo oficial da R Baião e uma foto real da seladora, elas entram no lugar dos elementos gerados — é o que deixa o card 100% fiel.
 
-- **Topo**: logomarca CENTERFRIOS (branca sobre a faixa da cor do evento) — hoje o topo só mostra texto quando `logo_url` está vazio.
-- **Arte do evento**: bloco visual da arte "Vácuo em Ação" logo abaixo do cabeçalho, largura total do card, cantos arredondados — aparece só quando o evento tem arte cadastrada (`background_image_url`), sem quebrar o layout do Circuito.
-- **Cor de marca**: os e-mails já usam `primary_color`; ajustar o contraste do texto do cabeçalho e do bloco de contagem regressiva para tons dourados escuros (`#c2a02d`) continuarem legíveis.
-- **Dados do evento**: conferir que "Quando" mostra corretamente evento de 2 dias (19/08 a 20/08, 11h–15h no fuso de São Paulo) e o local físico.
-- **Rodapé**: manter "powered by CENTERFRIOS" e o link de descadastro dos lembretes.
-- Cadastrar no evento a URL da logomarca CENTERFRIOS (`logo_url`) para que os e-mails já saiam branded.
+## 2. Meta tags no `<head>`
 
-## 3. Resend
+O site é uma SPA estática: os robôs de preview (WhatsApp, Telegram, LinkedIn) leem **apenas** o `index.html`, não as tags injetadas por rota. Então as tags do evento vão no `index.html`, que hoje mostra "Centerfrios — Crescendo com você" e uma og:image antiga do Lovable.
 
-- Conferir que o envio usa o remetente correto (`Eventos Centerfrios <eventos@eventos.centerfrios.com>`) e o `reply_to` configurado nas duas funções (confirmação e fila de lembretes).
-- Atualizar a tag `event_slug` para o novo slug e validar que as tags são aceitas pelo Resend (só letras, números, `_` e `-`).
-- Rodar um envio de teste real de confirmação e de lembrete para um endereço de verificação, checando `email_send_log` (status `sent` → `delivered` pelo webhook) e conferindo que o QR Code renderiza (gerado pela função interna `qr-code`, sem dependência externa).
-- Verificar se o webhook do Resend está registrando `delivered`/`bounced` nas colunas de rastreio.
+Ajuste em relação ao texto enviado: **og:image e twitter:image precisam de URL absoluta** (`https://eventos.centerfrios.com/og-vacuo-em-acao.png`) — caminho relativo não é resolvido pelos crawlers. O resto fica exatamente como você definiu:
 
-## 4. URL do evento
+- `og:type` website, `og:title` "Workshop Vácuo em Ação | CENTERFRIOS & R Baião", `og:description` conforme enviado, `og:image:width` 1200, `og:image:height` 630, `og:url` e `canonical` apontando para `https://eventos.centerfrios.com/register/vacuo_em_acao`.
+- `twitter:card` summary_large_image + title/description/image conforme enviado.
+- `<title>` e `meta description` do documento alinhados ao evento.
+- Remover as og/twitter images antigas do Google Storage para não haver ambiguidade.
 
-- Alterar o slug de `workshop-v-cuo-em-a-o-j4maq9` para `vacuo_em_acao`, deixando a página pública em `https://eventos.centerfrios.com/register/vacuo_em_acao`.
-- Melhorar o gerador de slug para transliterar acentos (á→a, ç→c, ã→a) em vez de removê-los, evitando novos slugs quebrados como "v-cuo-em-a-o".
-- Como o evento está em rascunho e sem inscritos, não há links antigos a preservar; os e-mails futuros já sairão com a URL nova.
+Também adiciono JSON-LD de `Event` (nome, datas 19–20/08/2026, local Showroom CENTERFRIOS Tabuleiro, organizador) — isso melhora a leitura por buscadores e agentes de IA.
+
+## 3. Links de campanha (UTMs) no domínio publicado
+
+O bloco "Link público de inscrição" monta a URL com `window.location.origin`, por isso está gerando `https://id-preview--...lovable.app/register/...`. Vou fixar o domínio público (`https://eventos.centerfrios.com`) como base dos links copiados/compartilhados, mantendo o preview apenas quando não houver domínio publicado. Assim os presets Instagram / WhatsApp / Landing page saem com UTMs já no domínio final.
 
 ## Detalhes técnicos
 
-- Arquivos tocados: `src/pages/Register.tsx`, `src/pages/CheckIn.tsx`, `src/pages/CheckInRapido.tsx`, `src/pages/PrivacyPolicy.tsx`, novo `src/hooks/useEventFavicon.ts`, `supabase/functions/_shared/email-templates.ts`, `src/pages/dashboard/CreateEvent.tsx` (slugify).
-- Migração: `update events set slug = 'vacuo_em_acao', logo_url = <logo centerfrios>` para o evento `29157586…`.
-- Redeploy das funções `send-registration-confirmation`, `process-reminder-queue` e `render-email-preview` após a mudança nos templates.
+- Arquivos: `index.html`, `src/components/event-detail/RegistrationLinkBlock.tsx`, novo `public/og-vacuo-em-acao.png`, e uma constante de origem pública em `src/lib/utils.ts`.
+- A imagem fica em `public/` (não em assets CDN) porque o crawler precisa dela em URL previsível no domínio do site.
+- Após publicar, os previews antigos ficam em cache nas plataformas; validar/forçar atualização no depurador de links do Facebook e no LinkedIn Post Inspector. O WhatsApp costuma atualizar sozinho em algumas horas.
