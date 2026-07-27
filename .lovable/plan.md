@@ -1,33 +1,16 @@
-## Situação
+## Problema
 
-A lista com os 14 nomes (Euclides, Maria, Clara, Neide, Clarice, Carla, Ricardo, Jackelline, Filipe, Willames, Rafaela, Rosângela, Humberto, Júlio) **já está no código** em `src/pages/Vendedor.tsx`. Os nomes antigos (João, Maria, Pedro, Ana, Carlos, Juliana, Outro…) que você vê são a versão **publicada** — o site em produção ainda está com o código anterior. Por isso o primeiro passo é publicar.
+O favicon padrão declarado no `index.html` é `/favicon-circuito.png` (evento anterior), então qualquer página que não troque o ícone dinamicamente mostra o Circuito. A troca dinâmica existe (`useEventFavicon`) mas só é usada em `Register`, `CheckIn` e `CheckInRapido` — a página `/vendedor`, dedicada ao Vácuo em Ação, não a usa.
 
-Hoje o formulário de `/vendedor` envia os dados **apenas para o webhook do Make** (planilha). Nada é gravado no banco do app, então não existe base para o painel/ranking. Isso será corrigido.
+## O que fazer
 
-## O que será feito
-
-**1. Publicar**
-Publicar o app para que `https://eventos.centerfrios.com/vendedor` passe a mostrar a lista correta de colaboradores. Esse é o link público a compartilhar com a equipe:
-`https://eventos.centerfrios.com/vendedor`
-
-**2. Gravar as inscrições no banco**
-Ao enviar o formulário em `/vendedor`, além do webhook do Make, a inscrição será gravada no evento ativo (Workshop Vácuo em Ação) via a função de inscrição já existente, marcando o vendedor no campo de rastreamento. Assim os cadastros aparecem no painel interno, nos relatórios e recebem e-mail de confirmação como qualquer inscrição.
-
-- O nome do vendedor vai gravado em `tracking.vendedor` (mais `origem: "vendedor"`).
-- Se o WhatsApp já existir no evento, mostra aviso claro de duplicado sem quebrar o fluxo (o envio ao Make continua acontecendo).
-
-**3. Painel do colaborador (aba "Meu painel" em /vendedor)**
-Uma nova função pública somente-leitura no banco retorna, sem expor dados pessoais de outros vendedores:
-- Total de cadastros do colaborador (hoje e geral)
-- Lista dos clientes que ele cadastrou (nome, segmento, horário, status de check-in)
-- Ranking da equipe: apenas nome do colaborador + total de cadastros
-
-**4. Identidade visual do evento**
-O painel e o formulário recebem o visual do Workshop Vácuo em Ação: fundo grafite escuro (#12151C), destaques em dourado (#E6B012) e azul marinho (#0B2341), logo/artwork do evento no topo, cartões de KPI limpos, ranking com destaque para o 1º lugar, tudo mobile-first (o time vai usar no celular).
+1. **`/vendedor`**: aplicar `useEventFavicon({ slug: "vacuo_em_acao" })` (a página já é fixa nesse evento), garantindo o ícone do Vácuo na aba.
+2. **Favicon padrão neutro**: trocar o padrão do `index.html` de `favicon-circuito.png` para um ícone da marca CENTERFRIOS (não de um evento específico), para que páginas genéricas (landing, dashboard, login) não herdem o ícone de um evento passado. Se não houver ícone de marca disponível, gero um a partir da logo CENTERFRIOS.
+3. **Manter por evento**: `useEventFavicon` continua sendo a única fonte de ícone por evento — cada evento com regra própria no mapa `EVENT_FAVICONS`; eventos sem regra caem no ícone da marca. O Circuito passa a ser mapeado explicitamente (`/favicon-circuito.png`) para continuar correto nas suas páginas.
+4. **Verificar** as demais páginas ligadas a um evento (detalhe do evento no dashboard, página pública da empresa/eventos) e aplicar o hook onde houver um evento em contexto.
 
 ## Detalhes técnicos
 
-- Migração: função `public_vendedor_stats(p_vendedor text, p_event_id uuid)` — SECURITY DEFINER, STABLE, retorna JSON com `meus_totais`, `meus_cadastros` e `ranking` (só nome + contagem, sem PII de terceiros); leitura restrita a eventos com status `live`.
-- `Vendedor.tsx`: chamada a `register_for_event` com `p_tracking = { vendedor, origem: 'vendedor' }` antes do `enviarParaGoogleSheets`, tratamento de erros de duplicidade, reset imediato e contador incrementado a partir do retorno do banco (não mais só do localStorage).
-- Novo componente `src/components/vendedor/VendedorDashboard.tsx` + tokens de tema do evento aplicados localmente na rota (sem alterar o tema global do app).
-- A rota `/vendedor` continua pública (sem login) — a identificação é por seleção de nome, como já funciona.
+- `src/hooks/useEventFavicon.ts`: adicionar entrada para `circuito` e trocar `DEFAULT_FAVICON` pelo ícone de marca; a limpeza no unmount já restaura o valor anterior.
+- `index.html`: atualizar `rel="icon"` e `apple-touch-icon`.
+- Nenhuma mudança de backend ou de dados.
