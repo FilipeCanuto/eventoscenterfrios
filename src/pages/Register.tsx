@@ -22,6 +22,13 @@ import { Tables } from "@/integrations/supabase/types";
 import { supabase } from "@/integrations/supabase/client";
 import confetti from "canvas-confetti";
 import { trackPageView, buildInitialPayload } from "@/lib/visitorTracking";
+import { enviarParaGoogleSheets } from "@/lib/makeWebhook";
+
+// Localiza um valor no payload do formulário por padrões de rótulo.
+function pickField(data: Record<string, string>, re: RegExp): string {
+  const key = Object.keys(data).find((k) => re.test(k));
+  return key ? (data[key] || "").toString() : "";
+}
 
 
 // Regex simples para validação de e-mail (mais estrita do que `type="email"`).
