@@ -22,6 +22,13 @@ import { Tables } from "@/integrations/supabase/types";
 import { supabase } from "@/integrations/supabase/client";
 import confetti from "canvas-confetti";
 import { trackPageView, buildInitialPayload } from "@/lib/visitorTracking";
+import { enviarParaGoogleSheets } from "@/lib/makeWebhook";
+
+// Localiza um valor no payload do formulário por padrões de rótulo.
+function pickField(data: Record<string, string>, re: RegExp): string {
+  const key = Object.keys(data).find((k) => re.test(k));
+  return key ? (data[key] || "").toString() : "";
+}
 
 
 // Regex simples para validação de e-mail (mais estrita do que `type="email"`).
@@ -958,6 +965,19 @@ const Register = () => {
       if (registrationId) {
         trackPageView(event.id, { converted_registration_id: registrationId });
       }
+      // Planilha (Make): envia a inscrição finalizada
+      void enviarParaGoogleSheets({
+        nome: pickField(normalizedData, /nome/i),
+        whatsapp: pickField(normalizedData, /whats|telefone|celular/i),
+        email: pickField(normalizedData, /e-?mail/i),
+        segmento: pickField(normalizedData, /segmento/i),
+        vendedor:
+          searchParams.get("vendedor") ||
+          searchParams.get("seller") ||
+          utms.utm_term ||
+          utms.utm_source ||
+          null,
+      });
       // Analytics-ready event (Meta Pixel / GA4 / GTM can hook into this)
       try {
         (window as any).dataLayer = (window as any).dataLayer || [];

@@ -8,6 +8,7 @@ import { Logo } from "@/components/Logo";
 import { Loader2, XCircle, Clock, Mail, UserPlus } from "lucide-react";
 import confetti from "canvas-confetti";
 import { useEventFavicon } from "@/hooks/useEventFavicon";
+import { enviarParaGoogleSheets } from "@/lib/makeWebhook";
 
 type Status =
   | "idle"
@@ -143,6 +144,15 @@ const CheckInRapido = () => {
         setStatus("register_form");
         return;
       }
+
+      // Planilha (Make): inscrição feita na recepção/vendedor
+      void enviarParaGoogleSheets({
+        nome: cleanName,
+        whatsapp: cleanWhats,
+        email: cleanEmail,
+        segmento: "",
+        vendedor: new URLSearchParams(window.location.search).get("vendedor") || "Recepção/Vendedor",
+      });
 
       // Inscrição feita; faz check-in encadeado
       const { data, error } = await supabase.rpc("public_check_in_by_email" as never, {
