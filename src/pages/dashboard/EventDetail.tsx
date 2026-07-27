@@ -25,6 +25,7 @@ const EventDetail = () => {
   const { id } = useParams();
   const navigate = useNavigate();
   const { data: event, isLoading } = useEvent(id);
+  useEventFavicon(event ?? null);
   const { data: formFields } = useFormFields(id);
   const updateEvent = useUpdateEvent();
   const deleteEvent = useDeleteEvent();
