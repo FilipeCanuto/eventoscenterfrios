@@ -251,7 +251,10 @@ const SuccessCard = ({
   name: string;
   shareUrl: string;
 }) => {
-  const firstName = (name || "").trim().split(/\s+/)[0] || "";
+  const rawFirstName = (name || "").trim().split(/\s+/)[0] || "";
+  const firstName = rawFirstName
+    ? rawFirstName.charAt(0).toLocaleUpperCase("pt-BR") + rawFirstName.slice(1).toLocaleLowerCase("pt-BR")
+    : "";
   const [copied, setCopied] = useState(false);
   const dt = formatEventDateTimeParts(event);
   const logoUrl = event.logo_url;
@@ -325,7 +328,7 @@ const SuccessCard = ({
             Confirmação
           </div>
           <h1 className="text-4xl sm:text-5xl md:text-6xl font-display font-bold tracking-[-0.03em] leading-[1.05] text-foreground">
-            Inscrição confirmada
+            Inscrição Confirmada!
           </h1>
           <p className="text-lg sm:text-xl text-muted-foreground max-w-xl mx-auto">
             {firstName ? `${firstName}, você` : "Você"} está garantido(a) em{" "}
