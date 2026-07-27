@@ -1,10 +1,12 @@
 import { useEffect } from "react";
 
-const DEFAULT_FAVICON = "/favicon-circuito.png";
+// Ícone institucional (páginas sem evento em contexto).
+const DEFAULT_FAVICON = "/favicon-centerfrios.png";
 
 // Ícone específico por evento (chave = slug ou parte do slug/nome).
 const EVENT_FAVICONS: { match: RegExp; href: string }[] = [
-  { match: /vacuo[_-]?em[_-]?acao|v-cuo-em-a-o/i, href: "/favicon-vacuo.png" },
+  { match: /v[áa]cuo[_\s-]?em[_\s-]?a[çc][ãa]o|vacuo[_-]?em[_-]?acao|v-cuo-em-a-o/i, href: "/favicon-vacuo.png" },
+  { match: /circuito/i, href: "/favicon-circuito.png" },
 ];
 
 export function faviconForEvent(event?: { slug?: string | null; name?: string | null } | null) {

@@ -14,6 +14,7 @@ import {
 import { enviarParaGoogleSheets } from "@/lib/makeWebhook";
 import { supabase } from "@/integrations/supabase/client";
 import VendedorDashboard from "@/components/vendedor/VendedorDashboard";
+import { useEventFavicon } from "@/hooks/useEventFavicon";
 
 const VENDEDORES = [
   "Carla",
@@ -76,6 +77,7 @@ const emptyForm = { nome: "", whatsapp: "", email: "", segmento: "" };
 
 export default function Vendedor() {
   const [vendedor, setVendedor] = useState<string | null>(null);
+  useEventFavicon({ slug: EVENT_SLUG });
   const [escolha, setEscolha] = useState("");
   const [total, setTotal] = useState(0);
   const [form, setForm] = useState(emptyForm);

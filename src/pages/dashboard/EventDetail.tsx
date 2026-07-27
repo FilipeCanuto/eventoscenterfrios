@@ -19,11 +19,13 @@ import EventQRCode from "@/components/event-detail/EventQRCode";
 import RegistrationLinkBlock from "@/components/event-detail/RegistrationLinkBlock";
 import EventLeadsTable from "@/components/event-detail/EventLeadsTable";
 import EventEmailAudit from "@/components/event-detail/EventEmailAudit";
+import { useEventFavicon } from "@/hooks/useEventFavicon";
 
 const EventDetail = () => {
   const { id } = useParams();
   const navigate = useNavigate();
   const { data: event, isLoading } = useEvent(id);
+  useEventFavicon(event ?? null);
   const { data: formFields } = useFormFields(id);
   const updateEvent = useUpdateEvent();
   const deleteEvent = useDeleteEvent();
