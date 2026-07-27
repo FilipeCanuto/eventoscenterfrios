@@ -328,7 +328,7 @@ const SuccessCard = ({
             Confirmação
           </div>
           <h1 className="text-4xl sm:text-5xl md:text-6xl font-display font-bold tracking-[-0.03em] leading-[1.05] text-foreground">
-            Inscrição confirmada
+            Inscrição Confirmada!
           </h1>
           <p className="text-lg sm:text-xl text-muted-foreground max-w-xl mx-auto">
             {firstName ? `${firstName}, você` : "Você"} está garantido(a) em{" "}
