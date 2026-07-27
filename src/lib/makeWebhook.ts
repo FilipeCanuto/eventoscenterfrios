@@ -36,7 +36,7 @@ export async function enviarParaGoogleSheets(input: SheetsPayload): Promise<void
     whatsapp: input.whatsapp || "",
     email: input.email || "",
     segmento: input.segmento || "",
-    vendedor: input.vendedor?.trim() || "Orgânico/Site",
+    vendedor: input.vendedor?.trim() || "Orgânico",
     status: "Pendente",
   };
 
