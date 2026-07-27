@@ -21,6 +21,7 @@ const CompanyPage = lazy(() => import("./pages/CompanyPage"));
 const PublicEvents = lazy(() => import("./pages/PublicEvents"));
 const CheckIn = lazy(() => import("./pages/CheckIn"));
 const CheckInRapido = lazy(() => import("./pages/CheckInRapido"));
+const Vendedor = lazy(() => import("./pages/Vendedor"));
 const UnsubscribeReminders = lazy(() => import("./pages/UnsubscribeReminders"));
 const PrivacyPolicy = lazy(() => import("./pages/PrivacyPolicy"));
 const OAuthConsent = lazy(() => import("./pages/OAuthConsent"));
@@ -68,6 +69,7 @@ const App = () => (
                 <Route path="/register/:slug" element={<Register />} />
                 <Route path="/check-in/:registrationId" element={<CheckIn />} />
                 <Route path="/checkin-rapido" element={<CheckInRapido />} />
+                <Route path="/vendedor" element={<Vendedor />} />
                 <Route path="/unsubscribe-reminders/:token" element={<UnsubscribeReminders />} />
                 <Route path="/company/:companySlug" element={<CompanyPage />} />
                 <Route path="/privacidade" element={<PrivacyPolicy />} />
