@@ -251,7 +251,10 @@ const SuccessCard = ({
   name: string;
   shareUrl: string;
 }) => {
-  const firstName = (name || "").trim().split(/\s+/)[0] || "";
+  const rawFirstName = (name || "").trim().split(/\s+/)[0] || "";
+  const firstName = rawFirstName
+    ? rawFirstName.charAt(0).toLocaleUpperCase("pt-BR") + rawFirstName.slice(1).toLocaleLowerCase("pt-BR")
+    : "";
   const [copied, setCopied] = useState(false);
   const dt = formatEventDateTimeParts(event);
   const logoUrl = event.logo_url;
