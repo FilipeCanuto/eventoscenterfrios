@@ -430,7 +430,10 @@ serve(async (req) => {
       status: "sent",
       provider_status: resp.status,
       provider_message_id: resendId,
+      rendered_subject: built.subject,
+      rendered_html: built.html,
     });
+
 
     console.log("[send-registration-confirmation] Sent", recipientEmail);
     return new Response(JSON.stringify({ ok: true, corrected: prep.corrected }), {
