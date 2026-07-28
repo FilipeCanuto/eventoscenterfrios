@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { Loader2, CheckCircle2, AlertTriangle, Ban, Clock, Send, Download, RefreshCw } from "lucide-react";
+import { Loader2, CheckCircle2, AlertTriangle, Ban, Clock, Send, Download, RefreshCw, Eye } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { Button } from "@/components/ui/button";
@@ -13,6 +13,7 @@ import {
   EmailBucket,
   AuditRow,
 } from "@/hooks/useEventEmailAudit";
+import SentEmailViewerDialog from "./SentEmailViewerDialog";
 
 interface Props {
   eventId: string;
@@ -41,6 +42,7 @@ export default function EventEmailAudit({ eventId, eventName }: Props) {
   const [filter, setFilter] = useState<typeof FILTERS[number]["key"]>("pending");
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [running, setRunning] = useState(false);
+  const [viewing, setViewing] = useState<{ id: string; email: string | null; name: string | null } | null>(null);
 
   const filtered = useMemo<AuditRow[]>(() => {
     if (!data) return [];
@@ -323,8 +325,20 @@ export default function EventEmailAudit({ eventId, eventName }: Props) {
                         {r.last_error && <span className="ml-2 text-destructive/80">· {r.last_error}</span>}
                       </div>
                     </div>
-                    <div className="text-[11px] text-muted-foreground whitespace-nowrap hidden sm:block">
-                      {format(new Date(r.created_at), "d MMM", { locale: ptBR })}
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <Button
+                        variant="ghost" size="sm"
+                        className="rounded-full h-8 text-xs px-2.5"
+                        onClick={() => setViewing({
+                          id: r.registration_id, email: r.lead_email, name: r.lead_name,
+                        })}
+                      >
+                        <Eye className="w-3.5 h-3.5 sm:mr-1" />
+                        <span className="hidden sm:inline">Ver e-mail</span>
+                      </Button>
+                      <div className="text-[11px] text-muted-foreground whitespace-nowrap hidden sm:block">
+                        {format(new Date(r.created_at), "d MMM", { locale: ptBR })}
+                      </div>
                     </div>
                   </div>
                 );
@@ -333,9 +347,18 @@ export default function EventEmailAudit({ eventId, eventName }: Props) {
           </>
         )}
       </div>
+
+      <SentEmailViewerDialog
+        open={!!viewing}
+        onOpenChange={(v) => !v && setViewing(null)}
+        registrationId={viewing?.id ?? null}
+        recipientEmail={viewing?.email ?? null}
+        recipientName={viewing?.name ?? null}
+      />
     </div>
   );
 }
+
 
 function Stat({ label, value, hint, tone }: { label: string; value: number; hint?: string; tone?: "success" | "warning" | "danger" | "muted" }) {
   const toneCls =

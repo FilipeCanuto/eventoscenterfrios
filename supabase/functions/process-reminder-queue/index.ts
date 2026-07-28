@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { buildEmail } from "../_shared/email-templates.ts";
+import { loadCustomTemplate } from "../_shared/custom-template.ts";
 import { prepareEmailForSend } from "../_shared/email-validate.ts";
 
 const corsHeaders = {
@@ -163,8 +164,9 @@ serve(async (req) => {
         // Load registration + event
         const { data: reg } = await supabase
           .from("registrations")
-          .select(`id, status, lead_email, lead_name,
-            events ( name, event_date, event_end_date, timezone, location_type, location_value, slug, primary_color, logo_url, background_image_url )`)
+          .select(`id, status, lead_email, lead_name, tracking,
+            events ( id, name, event_date, event_end_date, timezone, location_type, location_value, slug, primary_color, logo_url, background_image_url )`)
+
           .eq("id", item.registration_id)
           .maybeSingle();
 
@@ -218,13 +220,18 @@ serve(async (req) => {
           continue;
         }
 
+        const customTemplate = await loadCustomTemplate(supabase, ev.id, item.email_type as any);
+
         const built = buildEmail(item.email_type as any, {
           registrationId: reg.id,
           recipientName: reg.lead_name || "",
           event: ev,
           origin: PUBLIC_ORIGIN,
           unsubscribeToken: item.unsubscribe_token,
+          vendedor: ((reg as any).tracking || {})?.vendedor || null,
+          customTemplate,
         });
+
 
         const resp = await fetch(`${GATEWAY_URL}/emails`, {
           method: "POST",
@@ -338,6 +345,8 @@ serve(async (req) => {
           status: "sent",
           provider_status: resp.status,
           provider_message_id: resendId,
+          rendered_subject: built.subject,
+          rendered_html: built.html,
         });
         sent++;
         await sleep(PER_ITEM_DELAY_MS);

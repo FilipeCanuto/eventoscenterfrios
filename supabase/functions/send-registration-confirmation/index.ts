@@ -1,6 +1,8 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { buildConfirmation } from "../_shared/email-templates.ts";
+import { buildEmail } from "../_shared/email-templates.ts";
+import { loadCustomTemplate } from "../_shared/custom-template.ts";
+
 import { prepareEmailForSend } from "../_shared/email-validate.ts";
 
 const corsHeaders = {
@@ -34,6 +36,8 @@ async function logAttempt(
     provider_status?: number | null;
     error_message?: string | null;
     provider_message_id?: string | null;
+    rendered_subject?: string | null;
+    rendered_html?: string | null;
   },
 ) {
   try {
@@ -42,6 +46,7 @@ async function logAttempt(
     console.warn("[send-registration-confirmation] log insert failed", e);
   }
 }
+
 
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
@@ -291,12 +296,17 @@ serve(async (req) => {
     // otherwise check-in links require a Lovable login.
     const origin = "https://eventos.centerfrios.com";
 
-    const built = buildConfirmation({
+    const customTemplate = await loadCustomTemplate(supabase, ev.id, "confirmation");
+
+    const built = buildEmail("confirmation", {
       registrationId: reg.id,
       recipientName: reg.lead_name || "",
       event: ev,
       origin,
+      vendedor: (tracking as any)?.vendedor || null,
+      customTemplate,
     });
+
 
     const resp = await fetch(`${GATEWAY_URL}/emails`, {
       method: "POST",
@@ -420,7 +430,10 @@ serve(async (req) => {
       status: "sent",
       provider_status: resp.status,
       provider_message_id: resendId,
+      rendered_subject: built.subject,
+      rendered_html: built.html,
     });
+
 
     console.log("[send-registration-confirmation] Sent", recipientEmail);
     return new Response(JSON.stringify({ ok: true, corrected: prep.corrected }), {

@@ -49,7 +49,13 @@ export interface EmailContext {
   // Momento de referência usado para cálculos relativos (ex.: "faltam 24h").
   // Deve ser o instante em que o e-mail será (ou foi) enviado. Default: now().
   referenceDate?: Date;
+  // Nome do vendedor responsável (tag {{vendedor}}).
+  vendedor?: string | null;
+  // Template customizado do evento (assunto/corpo com tags). Quando presente,
+  // substitui o corpo padrão do sistema.
+  customTemplate?: { subject?: string | null; body?: string | null } | null;
 }
+
 
 export function escapeHtml(s: string) {
   return (s || "").replace(/[&<>"']/g, (c) =>
@@ -416,7 +422,169 @@ export function buildReminder2h(ctx: EmailContext) {
   return { html, text, subject };
 }
 
-export function buildEmail(type: "reminder_7d" | "reminder_1d" | "reminder_2h" | "confirmation", ctx: EmailContext) {
+// ===== CUSTOM TEMPLATES (editable per event) =====
+
+export type TemplateType = "confirmation" | "reminder_1d" | "reminder_2h";
+
+export const TEMPLATE_TAGS = [
+  "nome", "evento", "data", "horario", "local", "qr_code", "vendedor",
+] as const;
+
+const BADGE: Record<TemplateType, string> = {
+  confirmation: "Inscrição confirmada",
+  reminder_1d: "Amanhã é o dia",
+  reminder_2h: "Começa em 2 horas",
+};
+
+export const DEFAULT_TEMPLATES: Record<TemplateType, { subject: string; body: string }> = {
+  confirmation: {
+    subject: "Inscrição confirmada — {{evento}}",
+    body: [
+      "<p>Olá, {{nome}}!</p>",
+      "<p>Recebemos a sua inscrição em <strong>{{evento}}</strong>. Guarde este e-mail — ele é a sua confirmação.</p>",
+      "<p><strong>Quando:</strong> {{data}} às {{horario}}<br/><strong>Local:</strong> {{local}}</p>",
+      "{{qr_code}}",
+      "<p>Adicione o evento à sua agenda e fique de olho nesta caixa de entrada — enviaremos lembretes próximos da data.</p>",
+    ].join("\n"),
+  },
+  reminder_1d: {
+    subject: "Amanhã é o dia! Tudo pronto para {{evento}}?",
+    body: [
+      "<p>Olá, {{nome}}!</p>",
+      "<p><strong>Amanhã é o dia!</strong> Tudo pronto para <strong>{{evento}}</strong>?</p>",
+      "<p><strong>Quando:</strong> {{data}} às {{horario}}<br/><strong>Local:</strong> {{local}}</p>",
+      "{{qr_code}}",
+    ].join("\n"),
+  },
+  reminder_2h: {
+    subject: "Começa em 2h — seu QR Code está pronto para o check-in",
+    body: [
+      "<p>Olá, {{nome}}!</p>",
+      "<p><strong>Começa em ~2 horas!</strong> Seu QR Code está pronto — basta apresentar este e-mail na entrada.</p>",
+      "<p><strong>Local:</strong> {{local}}</p>",
+      "{{qr_code}}",
+      "<p>Chegue com alguns minutos de antecedência para fazer o check-in com tranquilidade.</p>",
+    ].join("\n"),
+  },
+};
+
+// Remove elementos e atributos perigosos de HTML fornecido pelo painel.
+export function sanitizeTemplateHtml(html: string) {
+  return (html || "")
+    .replace(/<\s*(script|style|iframe|object|embed|link|meta)\b[\s\S]*?<\s*\/\s*\1\s*>/gi, "")
+    .replace(/<\s*(script|style|iframe|object|embed|link|meta)\b[^>]*\/?>/gi, "")
+    .replace(/\son[a-z]+\s*=\s*"[^"]*"/gi, "")
+    .replace(/\son[a-z]+\s*=\s*'[^']*'/gi, "")
+    .replace(/\son[a-z]+\s*=\s*[^\s>]+/gi, "")
+    .replace(/javascript:/gi, "");
+}
+
+export function templateValues(type: TemplateType, ctx: EmailContext) {
+  const ev = ctx.event;
+  const when = fmtDate(ev.event_date, ev.timezone);
+  const loc = locationBlocks(ev, ev.primary_color || "#E11D74");
+  return {
+    nome: ctx.recipientName?.trim() || "participante",
+    evento: ev.name,
+    data: when ? when.date : "a confirmar",
+    horario: when ? when.time : "a confirmar",
+    local: ev.location_value || "a definir",
+    vendedor: ctx.vendedor || "",
+    _locHtml: loc.html,
+  };
+}
+
+function renderTags(type: TemplateType, rawBody: string, ctx: EmailContext) {
+  const ev = ctx.event;
+  const brand = ev.primary_color || "#E11D74";
+  const checkInUrl = `${ctx.origin}/check-in/${ctx.registrationId}`;
+  const size = type === "reminder_2h" ? 300 : 220;
+  const qr = qrBlock(qrUrl(checkInUrl, size + 20), checkInUrl, brand, size);
+  const v = templateValues(type, ctx);
+
+  return sanitizeTemplateHtml(rawBody)
+    .replace(/\{\{\s*qr_code\s*\}\}/gi, qr)
+    .replace(/\{\{\s*nome\s*\}\}/gi, escapeHtml(v.nome))
+    .replace(/\{\{\s*evento\s*\}\}/gi, escapeHtml(v.evento))
+    .replace(/\{\{\s*data\s*\}\}/gi, escapeHtml(v.data))
+    .replace(/\{\{\s*horario\s*\}\}/gi, escapeHtml(v.horario))
+    .replace(/\{\{\s*local\s*\}\}/gi, escapeHtml(v.local))
+    .replace(/\{\{\s*vendedor\s*\}\}/gi, escapeHtml(v.vendedor));
+}
+
+function renderTagsText(type: TemplateType, rawBody: string, ctx: EmailContext) {
+  const v = templateValues(type, ctx);
+  const checkInUrl = `${ctx.origin}/check-in/${ctx.registrationId}`;
+  return sanitizeTemplateHtml(rawBody)
+    .replace(/\{\{\s*qr_code\s*\}\}/gi, `Seu ingresso digital (check-in): ${checkInUrl}`)
+    .replace(/\{\{\s*nome\s*\}\}/gi, v.nome)
+    .replace(/\{\{\s*evento\s*\}\}/gi, v.evento)
+    .replace(/\{\{\s*data\s*\}\}/gi, v.data)
+    .replace(/\{\{\s*horario\s*\}\}/gi, v.horario)
+    .replace(/\{\{\s*local\s*\}\}/gi, v.local)
+    .replace(/\{\{\s*vendedor\s*\}\}/gi, v.vendedor)
+    .replace(/<br\s*\/?>/gi, "\n")
+    .replace(/<\/p>/gi, "\n\n")
+    .replace(/<[^>]+>/g, "")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
+// Monta um e-mail a partir de um template customizado (assunto + corpo com tags).
+export function buildCustomEmail(
+  type: TemplateType,
+  ctx: EmailContext,
+  tpl: { subject?: string | null; body?: string | null },
+) {
+  const ev = ctx.event;
+  const brand = ev.primary_color || "#E11D74";
+  const fallback = DEFAULT_TEMPLATES[type];
+  const rawSubject = (tpl.subject || "").trim() || fallback.subject;
+  const rawBody = (tpl.body || "").trim() || fallback.body;
+
+  const inner = renderTags(type, rawBody, ctx);
+  const eventUrl = `${ctx.origin}/register/${encodeURIComponent(ev.slug)}`;
+  const gcal = googleCalendarUrl(ev, eventUrl);
+
+  const html = shellHtml({
+    brand,
+    eventName: ev.name,
+    badge: BADGE[type],
+    body: `<div style="font-size:15px;line-height:1.6;color:#333">${inner}</div>${ctaButtons(eventUrl, gcal, brand)}`,
+    origin: ctx.origin,
+    unsubscribeToken: type === "confirmation" ? null : ctx.unsubscribeToken,
+    logoUrl: ev.logo_url,
+    artUrl: ev.background_image_url,
+  });
+
+  const v = templateValues(type, ctx);
+  const subject = sanitizeSubject(
+    rawSubject
+      .replace(/\{\{\s*nome\s*\}\}/gi, v.nome)
+      .replace(/\{\{\s*evento\s*\}\}/gi, v.evento)
+      .replace(/\{\{\s*data\s*\}\}/gi, v.data)
+      .replace(/\{\{\s*horario\s*\}\}/gi, v.horario)
+      .replace(/\{\{\s*local\s*\}\}/gi, v.local)
+      .replace(/\{\{\s*vendedor\s*\}\}/gi, v.vendedor),
+  );
+
+  const text = [
+    renderTagsText(type, rawBody, ctx),
+    "", `Página do evento: ${eventUrl}`,
+    "", "Equipe Eventos Centerfrios",
+    unsubscribeFooterText(ctx.origin, type === "confirmation" ? null : ctx.unsubscribeToken),
+  ].filter(Boolean).join("\n");
+
+  return { html, text, subject };
+}
+
+export function buildEmail(
+  type: "reminder_7d" | "reminder_1d" | "reminder_2h" | "confirmation",
+  ctx: EmailContext,
+) {
+  if (ctx.customTemplate && type !== "reminder_7d") {
+    return buildCustomEmail(type as TemplateType, ctx, ctx.customTemplate);
+  }
   switch (type) {
     case "confirmation": return buildConfirmation(ctx);
     case "reminder_7d": return buildReminder7d(ctx);
@@ -424,3 +592,4 @@ export function buildEmail(type: "reminder_7d" | "reminder_1d" | "reminder_2h" |
     case "reminder_2h": return buildReminder2h(ctx);
   }
 }
+
