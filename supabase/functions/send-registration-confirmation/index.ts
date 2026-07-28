@@ -1,6 +1,8 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { buildConfirmation } from "../_shared/email-templates.ts";
+import { buildEmail } from "../_shared/email-templates.ts";
+import { loadCustomTemplate } from "../_shared/custom-template.ts";
+
 import { prepareEmailForSend } from "../_shared/email-validate.ts";
 
 const corsHeaders = {
