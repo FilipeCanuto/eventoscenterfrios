@@ -49,7 +49,13 @@ export interface EmailContext {
   // Momento de referência usado para cálculos relativos (ex.: "faltam 24h").
   // Deve ser o instante em que o e-mail será (ou foi) enviado. Default: now().
   referenceDate?: Date;
+  // Nome do vendedor responsável (tag {{vendedor}}).
+  vendedor?: string | null;
+  // Template customizado do evento (assunto/corpo com tags). Quando presente,
+  // substitui o corpo padrão do sistema.
+  customTemplate?: { subject?: string | null; body?: string | null } | null;
 }
+
 
 export function escapeHtml(s: string) {
   return (s || "").replace(/[&<>"']/g, (c) =>
