@@ -323,8 +323,20 @@ export default function EventEmailAudit({ eventId, eventName }: Props) {
                         {r.last_error && <span className="ml-2 text-destructive/80">· {r.last_error}</span>}
                       </div>
                     </div>
-                    <div className="text-[11px] text-muted-foreground whitespace-nowrap hidden sm:block">
-                      {format(new Date(r.created_at), "d MMM", { locale: ptBR })}
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <Button
+                        variant="ghost" size="sm"
+                        className="rounded-full h-8 text-xs px-2.5"
+                        onClick={() => setViewing({
+                          id: r.registration_id, email: r.lead_email, name: r.lead_name,
+                        })}
+                      >
+                        <Eye className="w-3.5 h-3.5 sm:mr-1" />
+                        <span className="hidden sm:inline">Ver e-mail</span>
+                      </Button>
+                      <div className="text-[11px] text-muted-foreground whitespace-nowrap hidden sm:block">
+                        {format(new Date(r.created_at), "d MMM", { locale: ptBR })}
+                      </div>
                     </div>
                   </div>
                 );
@@ -333,9 +345,18 @@ export default function EventEmailAudit({ eventId, eventName }: Props) {
           </>
         )}
       </div>
+
+      <SentEmailViewerDialog
+        open={!!viewing}
+        onOpenChange={(v) => !v && setViewing(null)}
+        registrationId={viewing?.id ?? null}
+        recipientEmail={viewing?.email ?? null}
+        recipientName={viewing?.name ?? null}
+      />
     </div>
   );
 }
+
 
 function Stat({ label, value, hint, tone }: { label: string; value: number; hint?: string; tone?: "success" | "warning" | "danger" | "muted" }) {
   const toneCls =
