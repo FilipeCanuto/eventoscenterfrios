@@ -116,6 +116,12 @@ const Events = () => {
         </Button>
       </div>
 
+      <RankingVendedoresCard
+        registrations={registrations}
+        events={events?.map((e) => ({ id: e.id, name: e.name }))}
+      />
+
+
       {upcoming && upcoming.length > 0 && (
         <div>
           <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-4">Próximos</h2>
