@@ -127,34 +127,39 @@ export default function Vendedor() {
     }
     setEnviando(true);
     let avisoDuplicado = false;
+
+    // Snapshot exato do que o vendedor digitou + vendedor logado (localStorage)
+    const vendedorAtual = localStorage.getItem(SELLER_KEY) || vendedor;
+    const payload = {
+      nome: form.nome.trim(),
+      whatsapp: form.whatsapp.trim(),
+      email: form.email.trim(),
+      segmento: form.segmento,
+      vendedor: vendedorAtual,
+    };
+
     try {
+      // 1) Webhook do Make sempre primeiro (nunca depende do banco)
+      await enviarParaGoogleSheets(payload);
+
+      // 2) Grava no evento (falha aqui não impede a planilha)
       if (eventId) {
         const { error } = await supabase.rpc("register_for_event", {
           p_event_id: eventId,
           p_data: {
-            "Nome Completo": form.nome.trim(),
-            "Endereço de E-mail": form.email.trim(),
-            WhatsApp: form.whatsapp.trim(),
-            Segmento: form.segmento,
+            "Nome Completo": payload.nome,
+            "Endereço de E-mail": payload.email,
+            WhatsApp: payload.whatsapp,
+            Segmento: payload.segmento,
           },
-          p_tracking: { vendedor, origem: "vendedor" },
+          p_tracking: { vendedor: vendedorAtual, origem: "vendedor" },
         });
-        if (error) {
-          if (/already registered|maximum number/i.test(error.message)) {
-            avisoDuplicado = true;
-          } else {
-            throw error;
-          }
+        if (error && /already registered|maximum number/i.test(error.message)) {
+          avisoDuplicado = true;
+        } else if (error) {
+          console.warn("[vendedor] falha ao gravar inscrição", error.message);
         }
       }
-
-      await enviarParaGoogleSheets({
-        nome: form.nome.trim(),
-        whatsapp: form.whatsapp.trim(),
-        email: form.email.trim(),
-        segmento: form.segmento,
-        vendedor,
-      });
 
       const novo = total + 1;
       setTotal(novo);
