@@ -29,6 +29,8 @@ export type Database = {
           provider_status: number | null
           recipient_email: string | null
           registration_id: string | null
+          rendered_html: string | null
+          rendered_subject: string | null
           status: string
         }
         Insert: {
@@ -45,6 +47,8 @@ export type Database = {
           provider_status?: number | null
           recipient_email?: string | null
           registration_id?: string | null
+          rendered_html?: string | null
+          rendered_subject?: string | null
           status: string
         }
         Update: {
@@ -61,6 +65,8 @@ export type Database = {
           provider_status?: number | null
           recipient_email?: string | null
           registration_id?: string | null
+          rendered_html?: string | null
+          rendered_subject?: string | null
           status?: string
         }
         Relationships: []
@@ -92,27 +98,33 @@ export type Database = {
       email_templates: {
         Row: {
           body: string
+          created_at: string
           enabled: boolean
           event_id: string
           id: string
           subject: string
-          template_type: Database["public"]["Enums"]["email_template_type"]
+          template_type: string
+          updated_at: string
         }
         Insert: {
           body?: string
+          created_at?: string
           enabled?: boolean
           event_id: string
           id?: string
           subject?: string
-          template_type: Database["public"]["Enums"]["email_template_type"]
+          template_type: string
+          updated_at?: string
         }
         Update: {
           body?: string
+          created_at?: string
           enabled?: boolean
           event_id?: string
           id?: string
           subject?: string
-          template_type?: Database["public"]["Enums"]["email_template_type"]
+          template_type?: string
+          updated_at?: string
         }
         Relationships: [
           {
