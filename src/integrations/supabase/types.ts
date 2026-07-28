@@ -627,6 +627,10 @@ export type Database = {
         Args: { p_email: string; p_event_id?: string }
         Returns: Json
       }
+      public_check_in_scan: {
+        Args: { p_registration_id: string }
+        Returns: Json
+      }
       public_get_open_events_for_checkin: { Args: never; Returns: Json }
       public_vendedor_stats: {
         Args: { p_event_id?: string; p_vendedor: string }

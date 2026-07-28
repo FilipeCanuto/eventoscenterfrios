@@ -7,6 +7,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { Plus, Search, CalendarDays, Users, Loader2, MapPin, ExternalLink, LayoutGrid, List } from "lucide-react";
 import { useEvents } from "@/hooks/useEvents";
 import { useRegistrations } from "@/hooks/useRegistrations";
+import RankingVendedoresCard from "@/components/dashboard/RankingVendedoresCard";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 
@@ -115,6 +116,12 @@ const Events = () => {
           </Link>
         </Button>
       </div>
+
+      <RankingVendedoresCard
+        registrations={registrations}
+        events={events?.map((e) => ({ id: e.id, name: e.name }))}
+      />
+
 
       {upcoming && upcoming.length > 0 && (
         <div>

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { Loader2, CheckCircle2, UserRound } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -102,7 +102,28 @@ export default function Vendedor() {
       .then(({ data }) => setEventId(data?.id ?? null));
   }, []);
 
+  // Sincroniza o contador com o número real de cadastros de hoje no banco.
+  const sincronizarTotal = useCallback(
+    async (nome: string) => {
+      const { data } = await supabase.rpc("public_vendedor_stats" as never, {
+        p_vendedor: nome,
+      } as never);
+      const hoje = (data as { hoje?: number } | null)?.hoje;
+      if (typeof hoje === "number") {
+        setTotal(hoje);
+        salvarContador(nome, hoje);
+      }
+    },
+    [],
+  );
+
+  useEffect(() => {
+    if (!vendedor) return;
+    sincronizarTotal(vendedor);
+  }, [vendedor, refreshKey, aba, sincronizarTotal]);
+
   const nomeFinal = useMemo(() => escolha.trim(), [escolha]);
+
 
   function identificar() {
     if (!nomeFinal) return;
