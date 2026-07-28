@@ -36,6 +36,8 @@ async function logAttempt(
     provider_status?: number | null;
     error_message?: string | null;
     provider_message_id?: string | null;
+    rendered_subject?: string | null;
+    rendered_html?: string | null;
   },
 ) {
   try {
@@ -44,6 +46,7 @@ async function logAttempt(
     console.warn("[send-registration-confirmation] log insert failed", e);
   }
 }
+
 
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
