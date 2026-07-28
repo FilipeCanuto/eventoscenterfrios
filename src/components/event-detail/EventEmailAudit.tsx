@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { Loader2, CheckCircle2, AlertTriangle, Ban, Clock, Send, Download, RefreshCw } from "lucide-react";
+import { Loader2, CheckCircle2, AlertTriangle, Ban, Clock, Send, Download, RefreshCw, Eye } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { Button } from "@/components/ui/button";
@@ -13,6 +13,7 @@ import {
   EmailBucket,
   AuditRow,
 } from "@/hooks/useEventEmailAudit";
+import SentEmailViewerDialog from "./SentEmailViewerDialog";
 
 interface Props {
   eventId: string;
@@ -41,6 +42,7 @@ export default function EventEmailAudit({ eventId, eventName }: Props) {
   const [filter, setFilter] = useState<typeof FILTERS[number]["key"]>("pending");
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [running, setRunning] = useState(false);
+  const [viewing, setViewing] = useState<{ id: string; email: string | null; name: string | null } | null>(null);
 
   const filtered = useMemo<AuditRow[]>(() => {
     if (!data) return [];
