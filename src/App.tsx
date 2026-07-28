@@ -21,6 +21,7 @@ const CompanyPage = lazy(() => import("./pages/CompanyPage"));
 const PublicEvents = lazy(() => import("./pages/PublicEvents"));
 const CheckIn = lazy(() => import("./pages/CheckIn"));
 const CheckInRapido = lazy(() => import("./pages/CheckInRapido"));
+const CheckInScanner = lazy(() => import("./pages/CheckInScanner"));
 const Vendedor = lazy(() => import("./pages/Vendedor"));
 const UnsubscribeReminders = lazy(() => import("./pages/UnsubscribeReminders"));
 const PrivacyPolicy = lazy(() => import("./pages/PrivacyPolicy"));
