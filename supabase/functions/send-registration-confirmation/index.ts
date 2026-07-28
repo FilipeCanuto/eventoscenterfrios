@@ -296,12 +296,17 @@ serve(async (req) => {
     // otherwise check-in links require a Lovable login.
     const origin = "https://eventos.centerfrios.com";
 
-    const built = buildConfirmation({
+    const customTemplate = await loadCustomTemplate(supabase, ev.id, "confirmation");
+
+    const built = buildEmail("confirmation", {
       registrationId: reg.id,
       recipientName: reg.lead_name || "",
       event: ev,
       origin,
+      vendedor: (tracking as any)?.vendedor || null,
+      customTemplate,
     });
+
 
     const resp = await fetch(`${GATEWAY_URL}/emails`, {
       method: "POST",
