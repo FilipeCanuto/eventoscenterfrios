@@ -218,13 +218,18 @@ serve(async (req) => {
           continue;
         }
 
+        const customTemplate = await loadCustomTemplate(supabase, ev.id, item.email_type as any);
+
         const built = buildEmail(item.email_type as any, {
           registrationId: reg.id,
           recipientName: reg.lead_name || "",
           event: ev,
           origin: PUBLIC_ORIGIN,
           unsubscribeToken: item.unsubscribe_token,
+          vendedor: ((reg as any).tracking || {})?.vendedor || null,
+          customTemplate,
         });
+
 
         const resp = await fetch(`${GATEWAY_URL}/emails`, {
           method: "POST",
