@@ -1,57 +1,37 @@
-## Objetivo
+## 1. Nova rota `/checkin` — leitura por câmera
 
-Transformar a aba "E-mails" do evento em uma Central de E-mails com três blocos: **Auditoria** (já existe), **Editor de Templates** (novo) e **Pré-visualização** (novo), além de "Ver e-mail enviado" por participante.
+Página mobile-first (mesmo visual escuro/dourado do `/vendedor`) com leitor de câmera via `html5-qrcode`.
 
-## Estado atual (verificado)
+Fluxo:
+- Botão "Iniciar leitura" (necessário para permissão de câmera no iOS), câmera traseira por padrão.
+- Ao ler o QR, extrai o `registrationId` (UUID) do conteúdo — os QRs atuais apontam para `https://eventos.centerfrios.com/check-in/<uuid>`, então aceita tanto a URL completa quanto o UUID puro.
+- Chama uma função no banco que faz o check-in e devolve o nome do participante e o evento.
+- Tela de sucesso em verde com o nome grande, nome do evento e vibração curta; volta ao scanner automaticamente após ~2,5s para ler o próximo.
+- Estados tratados: já fez check-in (amarelo), inscrição não encontrada / cancelada / fora da janela (vermelho), erro de câmera com fallback de link para `/checkin-rapido` (por e-mail).
+- Proteção contra leituras duplicadas em sequência (mesmo código ignorado por alguns segundos).
 
-- A aba "E-mails" renderiza apenas `EventEmailAudit` (auditoria + reenvio em massa).
-- Existe a tabela `email_templates` (event_id, template_type, subject, body, enabled), mas ela está **vazia e não é usada por nada** — os e-mails são 100% montados em código (`supabase/functions/_shared/email-templates.ts` → `buildEmail`).
-- O enum `email_template_type` só tem `confirmation | reminder | followup`, ou seja, não cobre `reminder_1d` / `reminder_2h`.
-- Já existe a função `render-email-preview`, que renderiza o e-mail real de uma inscrição (usada no detalhe do inscrito).
-- O HTML efetivamente entregue **não é armazenado** hoje em `email_send_log` — só status/erro.
+Detalhe técnico: hoje a leitura anônima não consegue ler o nome do participante (as inscrições são protegidas por regras de acesso). Será criada uma função de banco `public_check_in_scan(registration_id)` que executa o check-in e retorna status + nome + nome do evento em uma única chamada — mesma janela de 4h e mesmas validações já usadas hoje. O campo de presença continua sendo `status = checked_in` + `checked_in_at`, que é o padrão já existente no sistema.
 
-## O que será construído
+## 2. Widget "Ranking do Time Comercial" no Dashboard
 
-### 1. Editor de Templates (sub-aba "Templates")
+Card novo na aba principal do dashboard (`/dashboard/events`), acima da lista de eventos:
+- Lista os vendedores em ordem decrescente pelo nº de inscritos cadastrados (`tracking.vendedor` das inscrições, ignorando canceladas).
+- Cada linha: posição (1º destacado), nome, total e barra de progresso proporcional ao líder.
+- Seletor de evento (padrão: evento ativo mais recente) e opção "Todos os eventos".
+- Estado vazio quando não há cadastros com vendedor.
 
-- Seletor de template: Confirmação, Lembrete 1 dia, Lembrete 2 horas.
-- Campos: **Assunto** e **Corpo da mensagem** (texto/HTML da parte editável — a moldura de marca, cabeçalho CENTERFRIOS, bloco de QR Code e rodapé continuam sendo gerados pelo sistema, garantindo entregabilidade e QR válido).
-- Barra de tags dinâmicas clicáveis que inserem no cursor: `{{nome}}`, `{{evento}}`, `{{data}}`, `{{horario}}`, `{{local}}`, `{{qr_code}}`, `{{vendedor}}`.
-- Botões **Salvar template** (grava em `email_templates`, por evento) e **Restaurar padrão** (volta ao template do sistema).
-- Botão **Enviar e-mail de teste** → dispara para o e-mail do usuário logado, com dados de exemplo (ou do primeiro inscrito real quando existir).
+Usa os dados já carregados pelo hook de inscrições do dashboard — sem chamadas extras.
 
-### 2. Pré-visualização em tempo real
+## 3. Correção do contador do vendedor
 
-- Sub-aba "Pré-visualização" ao lado do editor, com alternância **Computador / Celular** (iframe 100% vs. 390px, com moldura).
-- Renderização com debounce a cada alteração, mostrando também o assunto final.
-- Usa o mesmo motor de renderização do envio real, então o que aparece é o que será entregue.
+Hoje o texto "Você cadastrou X clientes hoje" vem de um contador em `localStorage`, que zera em outro aparelho/navegador e não reflete o banco — por isso aparece 0 enquanto o painel mostra 1.
 
-### 3. Auditoria: "Ver e-mail enviado"
+Correção: o cabeçalho passa a usar o valor real `hoje` retornado pelo mesmo RPC que alimenta o painel (`public_vendedor_stats`), atualizando após cada cadastro e ao trocar de aba. O `localStorage` fica só como valor otimista imediato até a resposta do servidor chegar.
 
-- Nova ação por linha na tabela de auditoria e no histórico de e-mails do inscrito.
-- Abre um modal com o e-mail daquele participante, com variáveis já substituídas (nome, evento, data, local, QR Code individual) e alternância desktop/celular.
-- Para envios feitos a partir de agora, o HTML renderizado é **gravado** junto ao log, então o modal mostra exatamente o que foi entregue. Para envios antigos (sem snapshot), o modal re-renderiza o template atual com os dados do inscrito e exibe um aviso de que é uma reconstrução, não o original.
+## Arquivos
 
-## Detalhes técnicos
-
-**Banco de dados (migração)**
-- Ampliar o enum `email_template_type` com `reminder_1d` e `reminder_2h` (ou migrar a coluna para `text` com CHECK) e adicionar `UNIQUE (event_id, template_type)` + `created_at/updated_at` com trigger.
-- Adicionar `rendered_html text` e `rendered_subject text` em `email_send_log` (snapshot do envio).
-- Grants/RLS: dono do evento e admin gerenciam `email_templates`; leitura do HTML só pelo dono do evento/admin (política de SELECT já existente em `email_send_log` cobre isso).
-
-**Backend (edge functions)**
-- `_shared/email-templates.ts`: extrair um interpolador de tags (`{{nome}}`, `{{evento}}`, `{{data}}`, `{{horario}}`, `{{local}}`, `{{vendedor}}`, `{{qr_code}}` → bloco de imagem QR) e fazer `buildEmail` aceitar um override opcional `{subject, body}` vindo de `email_templates`, com sanitização do HTML (sem `<script>`, sem handlers inline).
-- `send-registration-confirmation` e `process-reminder-queue`: carregar o template customizado do evento (se houver e `enabled`) e gravar `rendered_html`/`rendered_subject` no log.
-- `render-email-preview`: aceitar payload alternativo `{eventId, templateType, draftSubject, draftBody}` para prévia sem inscrição real, e `{logId}` para recuperar o snapshot armazenado.
-- Nova função `send-test-email`: valida sessão + posse do evento, renderiza o rascunho e envia ao e-mail do usuário logado (rate-limit simples de 1 envio a cada 30s).
-
-**Frontend**
-- `src/components/event-detail/EventEmailCenter.tsx`: casca com sub-abas Auditoria / Templates / Pré-visualização, substituindo a chamada direta a `EventEmailAudit` em `EventDetail.tsx`.
-- `EmailTemplateEditor.tsx` (editor + barra de tags + salvar/testar) e `EmailPreviewFrame.tsx` (iframe reutilizável com toggle desktop/mobile), reaproveitado no modal "Ver e-mail enviado".
-- `useEmailTemplates.ts`: hooks de leitura/gravação em `email_templates` + invalidação de cache.
-- Estilo alinhado ao projeto: pt-BR, cartões `rounded-xl`, botões pill, sem bordas.
-
-## Fora de escopo
-
-- Editor visual arrastar-e-soltar (o editor será de assunto + corpo com tags).
-- Envio em massa de campanhas/marketing.
+- Novo: `src/pages/CheckInScanner.tsx` (rota `/checkin`)
+- Novo: `src/components/dashboard/RankingVendedoresCard.tsx`
+- Editar: `src/App.tsx` (rota), `src/pages/dashboard/Events.tsx` (widget), `src/pages/Vendedor.tsx` + `src/components/vendedor/VendedorDashboard.tsx` (contador real)
+- Dependência: `html5-qrcode`
+- Migração: função `public_check_in_scan`
