@@ -18,7 +18,7 @@ import EventAttendeesTable from "@/components/event-detail/EventAttendeesTable";
 import EventQRCode from "@/components/event-detail/EventQRCode";
 import RegistrationLinkBlock from "@/components/event-detail/RegistrationLinkBlock";
 import EventLeadsTable from "@/components/event-detail/EventLeadsTable";
-import EventEmailAudit from "@/components/event-detail/EventEmailAudit";
+import EventEmailCenter from "@/components/event-detail/EventEmailCenter";
 import { useEventFavicon } from "@/hooks/useEventFavicon";
 
 const EventDetail = () => {
@@ -231,7 +231,7 @@ const EventDetail = () => {
         </TabsContent>
 
         <TabsContent value="emails" className="mt-5">
-          <EventEmailAudit eventId={event.id} eventName={event.name} />
+          <EventEmailCenter eventId={event.id} eventName={event.name} />
         </TabsContent>
 
         <TabsContent value="leads" className="mt-5">
