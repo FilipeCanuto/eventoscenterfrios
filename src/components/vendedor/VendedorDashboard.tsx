@@ -104,7 +104,7 @@ export default function VendedorDashboard({ vendedor }: { vendedor: string }) {
 
       <div className="space-y-3">
         <h3 className="text-sm font-semibold text-white/80 flex items-center gap-2">
-          <Trophy className="w-4 h-4 text-[#E6B012]" /> Ranking da equipe
+          <Trophy className="w-4 h-4 text-[#E6B012]" /> Ranking do time
         </h3>
         <div className="rounded-2xl bg-white/5 ring-1 ring-white/10 divide-y divide-white/5 overflow-hidden">
           {ranking.length === 0 && (
